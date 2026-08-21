@@ -450,6 +450,79 @@ Uma divisão equilibrada, mantendo revisão cruzada, seria:
 
 Fazer commits pequenos e descritivos. A divisão declarada no relatório deve refletir o histórico real do repositório.
 
+### Próximos passos a partir do estado atual
+
+Os módulos individuais do integrante A estão concluídos: requisição, servidor,
+monitoramento, métricas, invariantes, logs e testes de capacidade. O próximo
+passo imediato deve ser executado pelo **integrante B**. A integração da dupla
+descrita mais adiante depende das interfaces de políticas e tráfego estarem
+implementadas e testadas primeiro.
+
+#### Primeiro: trabalho do integrante B
+
+O integrante B deve começar pelas políticas, pois elas já podem ser testadas
+diretamente com os servidores existentes e não dependem do gerador de tráfego.
+A sequência recomendada é:
+
+1. Criar `policies.py` com uma interface comum `select(servers, rng) -> Server`.
+2. Implementar Round Robin e testar a sequência cíclica exata.
+3. Implementar a política Aleatória com o gerador pseudoaleatório recebido por
+   parâmetro e testar sua reprodutibilidade.
+4. Implementar Fila Mais Curta usando o desempate determinístico
+   `(waiting_count, active_count, server_id)` e testar todos os empates.
+5. Criar `traffic.py` com a Pareto Limitada, limites explícitos e transformação
+   inversa.
+6. Testar limites, reprodutibilidade e proximidade entre média empírica e média
+   teórica da distribuição.
+7. Representar cada chegada com tempo, `request_id` e `burst_id`, formando um
+   traço imutável e reutilizável.
+8. Gerar o traço com uma semente independente da política e comprovar que as
+   três políticas recebem exatamente as mesmas chegadas em cada repetição.
+
+Essas entregas também devem ser separadas em commits pequenos. Uma divisão
+adequada seria: interface e Round Robin; política Aleatória; Fila Mais Curta;
+Pareto Limitada; traço reproduzível; testes complementares e documentação.
+
+O trabalho individual do integrante B estará pronto para integração quando:
+
+- as três políticas passarem em seus testes unitários;
+- a Pareto Limitada respeitar os limites e a semente;
+- o mesmo par `(burst_max, repetição)` sempre produzir o mesmo traço;
+- a geração do traço não depender da política selecionada;
+- as interfaces públicas estiverem exportadas pelo pacote e documentadas no
+  `README.MD`.
+
+#### Depois: trabalho conjunto da dupla
+
+As atividades abaixo devem começar somente depois que o integrante B concluir
+e estabilizar as interfaces anteriores. Assim, a integração não precisará usar
+implementações provisórias de política ou tráfego.
+
+1. Revisar em conjunto as políticas, o gerador Pareto e os módulos basilares já
+   implementados pelo integrante A.
+2. Criar o balanceador, responsável por selecionar o servidor, atribuir a
+   requisição e registrar o evento de roteamento.
+3. Criar `simulation.py` para montar uma rodada com a configuração, o ambiente
+   SimPy, os três servidores, a política, o traço, o coletor e o logger.
+4. Integrar automaticamente os eventos de chegada, roteamento, início e
+   conclusão, eliminando chamadas manuais ao coletor no fluxo principal.
+5. Completar o Passo 1 com uma execução mínima sem tráfego até o horizonte e,
+   em seguida, executar traços reais respeitando a janela do Passo 6.
+6. Adicionar testes de integração para carga baixa, sobrecarga, backlog,
+   conservação, igualdade dos traços entre políticas e reprodutibilidade.
+7. Criar `experiments.py`, executar as 120 rodadas e salvar resultados
+   individuais e agregados em CSV, com média, desvio-padrão e IC de 95%.
+8. Implementar e revisar em conjunto o modelo analítico, a comparação entre
+   teoria e simulação e os gráficos.
+9. Preparar a CLI, conferir a execução em Windows e Linux e finalizar o
+   `README.MD` com comandos e localização dos resultados.
+10. Escrever o relatório, revisar a divisão do trabalho contra os commits e
+    repetir todos os experimentos com a versão final do código.
+
+Durante essa fase, cada integrante deve revisar o código do outro. Alterações
+de integração, protocolo experimental, modelo analítico, gráficos e relatório
+devem ser tratadas como trabalho conjunto no histórico do repositório.
+
 ## 9. Cronograma sugerido
 
 - **Semana 1:** esclarecer ambiguidades, montar estrutura, servidor e requisição.
@@ -502,4 +575,3 @@ Ao estudar filas, procurar especificamente pelos termos **Erlang C**, **fila M/M
 - [ ] O relatório está em formato IEEE e possui no máximo 4 páginas.
 - [ ] A divisão do trabalho é compatível com os commits.
 - [ ] Os arquivos finais seguem os nomes exigidos no enunciado.
-
