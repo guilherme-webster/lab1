@@ -28,6 +28,8 @@ implementados:
   disponível;
 - resumo imutável de uma rodada com chegadas, conclusões, pendências,
   throughput, tempo médio em fila e tempo médio de resposta;
+- validação das invariantes de topologia, capacidade, ciclo de vida das
+  requisições, janela de medição e conservação do sistema;
 - testes unitários das validações, do ciclo de vida da requisição, do limite de
   capacidade, da ordem FIFO e do monitoramento.
 
@@ -36,8 +38,8 @@ O caso de 16 requisições simultâneas está coberto pelos testes: 15 iniciam e
 
 Ainda não há uma simulação completa com três servidores. Criação da rodada a
 partir da configuração, balanceador, políticas, tráfego Pareto, integração do
-coletor, invariantes, logs configuráveis, experimentos, modelo analítico, CSVs
-e gráficos serão adicionados em etapas posteriores, conforme o
+coletor, logs configuráveis, experimentos, modelo analítico, CSVs e gráficos
+serão adicionados em etapas posteriores, conforme o
 [plano de implementação](PLANO_IMPLEMENTACAO.md).
 
 ## Componentes implementados
@@ -48,6 +50,7 @@ e gráficos serão adicionados em etapas posteriores, conforme o
 | `MetricEvent` | Representa um evento observado pelo coletor. |
 | `MetricsCollector` | Preserva eventos e calcula as métricas de uma rodada. |
 | `RunMetrics` | Representa o resumo imutável de uma rodada. |
+| `validate_simulation_invariants` | Valida configuração, servidores e eventos. |
 | `Request` | Mantém o ciclo de vida e os tempos de uma requisição. |
 | `Server` | Processa requisições concorrentemente e enfileira o excesso. |
 | `ServerState` | Representa uma fotografia imutável do estado do servidor. |
@@ -69,8 +72,23 @@ tempo de resposta = conclusão - chegada
 ```
 
 As médias são `None` quando ainda não existe nenhuma observação aplicável.
-Verificações de consistência entre os eventos serão adicionadas com as
-invariantes da simulação.
+
+## Invariantes da simulação
+
+Ao final de uma rodada,
+`validate_simulation_invariants(config, servers, collector)` verifica:
+
+- quantidade, identificadores, capacidade e tempo de serviço dos servidores;
+- uso do mesmo ambiente SimPy pelos servidores e pelo coletor;
+- limites de requisições ativas e tamanho não negativo das filas;
+- sequência `arrival`, `routing`, `service_started`, `service_completed`;
+- permanência da requisição no mesmo servidor durante o atendimento;
+- ausência de chegadas no horizonte ou depois dele;
+- conservação `chegadas = concluídas + ativas + aguardando`.
+
+Uma violação lança `SimulationInvariantError`. Eventos de conclusão posteriores
+ao horizonte, gerados por uma eventual fase de drenagem, não alteram a
+validação da janela oficial.
 
 ## Requisitos
 
@@ -139,6 +157,7 @@ tempo ocorre no relógio simulado do SimPy.
 src/load_balancer_sim/
 ├── __init__.py
 ├── config.py
+├── invariants.py
 ├── metrics.py
 ├── request.py
 └── server.py
@@ -146,6 +165,7 @@ src/load_balancer_sim/
 tests/
 ├── test_config.py
 ├── test_environment.py
+├── test_invariants.py
 ├── test_metrics.py
 ├── test_request.py
 └── test_server.py
