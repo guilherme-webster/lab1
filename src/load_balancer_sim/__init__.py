@@ -1,7 +1,7 @@
 """Simulador de balanceamento de carga do Trabalho 1 de MC714."""
 
 from load_balancer_sim.config import SimulationConfig
-from load_balancer_sim.metrics import MetricEvent, MetricsCollector
+from load_balancer_sim.metrics import MetricEvent, MetricsCollector, RunMetrics
 from load_balancer_sim.request import Request
 from load_balancer_sim.server import Server, ServerState
 
@@ -11,6 +11,7 @@ __all__ = [
     "MetricEvent",
     "MetricsCollector",
     "Request",
+    "RunMetrics",
     "Server",
     "ServerState",
     "SimulationConfig",

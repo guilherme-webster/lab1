@@ -1,6 +1,8 @@
 """Eventos basicos usados para coletar metricas da simulacao."""
 
 from dataclasses import dataclass
+from math import isfinite
+from statistics import fmean
 from typing import Literal
 
 import simpy
@@ -30,11 +32,25 @@ class MetricEvent:
     waiting_count: int | None
 
 
+@dataclass(frozen=True, slots=True)
+class RunMetrics:
+    """Resumo imutavel das metricas observadas em uma rodada."""
+
+    horizon: float
+    arrival_count: int
+    completed_count: int
+    pending_count: int
+    throughput: float
+    average_queue_time: float | None
+    average_response_time: float | None
+
+
 class MetricsCollector:
     """Armazena eventos na ordem em que foram observados.
 
-    Neste estagio, o coletor apenas registra dados. Calculos agregados,
-    invariantes e emissao de logs pertencem a incrementos posteriores.
+    O coletor tambem resume os eventos ocorridos dentro de uma janela. A
+    validacao de invariantes e a emissao de logs pertencem a incrementos
+    posteriores.
     """
 
     def __init__(self, environment: simpy.Environment) -> None:
@@ -65,6 +81,60 @@ class MetricsCollector:
         """Registra a conclusao do processamento por um servidor."""
         self._record("service_completed", request, server)
 
+    def calculate_run_metrics(self, horizon: float) -> RunMetrics:
+        """Calcula as metricas dos eventos pertencentes a uma janela.
+
+        Chegadas em ``horizon`` nao pertencem a rodada. Conclusoes exatamente
+        nesse instante pertencem, seguindo o protocolo de medicao do projeto.
+        O tempo medio de fila considera requisicoes que iniciaram servico na
+        janela; o tempo medio de resposta considera as que foram concluidas.
+        """
+        normalized_horizon = _positive_horizon(horizon)
+        arrival_times: dict[int, float] = {}
+        service_start_times: dict[int, float] = {}
+        completion_times: dict[int, float] = {}
+
+        for event in self._events:
+            if event.event == "arrival" and event.time < normalized_horizon:
+                arrival_times.setdefault(event.request_id, event.time)
+            elif (
+                event.event == "service_started"
+                and event.time <= normalized_horizon
+            ):
+                service_start_times.setdefault(event.request_id, event.time)
+            elif (
+                event.event == "service_completed"
+                and event.time <= normalized_horizon
+            ):
+                completion_times.setdefault(event.request_id, event.time)
+
+        arrived_request_ids = set(arrival_times)
+        started_request_ids = arrived_request_ids.intersection(service_start_times)
+        completed_request_ids = arrived_request_ids.intersection(completion_times)
+
+        queue_times = [
+            service_start_times[request_id] - arrival_times[request_id]
+            for request_id in started_request_ids
+        ]
+        response_times = [
+            completion_times[request_id] - arrival_times[request_id]
+            for request_id in completed_request_ids
+        ]
+
+        arrival_count = len(arrived_request_ids)
+        completed_count = len(completed_request_ids)
+        return RunMetrics(
+            horizon=normalized_horizon,
+            arrival_count=arrival_count,
+            completed_count=completed_count,
+            pending_count=arrival_count - completed_count,
+            throughput=completed_count / normalized_horizon,
+            average_queue_time=None if not queue_times else fmean(queue_times),
+            average_response_time=(
+                None if not response_times else fmean(response_times)
+            ),
+        )
+
     def _record(
         self,
         event: MetricEventType,
@@ -88,3 +158,16 @@ class MetricsCollector:
                 waiting_count=None if server is None else server.waiting_count,
             )
         )
+
+
+def _positive_horizon(value: float) -> float:
+    """Normaliza e valida o horizonte usado no calculo das metricas."""
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise TypeError("horizon deve ser um numero")
+
+    normalized_value = float(value)
+    if not isfinite(normalized_value):
+        raise ValueError("horizon deve ser finito")
+    if normalized_value <= 0:
+        raise ValueError("horizon deve ser positivo")
+    return normalized_value
