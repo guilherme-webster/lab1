@@ -23,6 +23,9 @@ implementados:
   observados;
 - histórico imutável do estado do servidor nos eventos de recebimento, início
   e conclusão do serviço;
+- coletor central com eventos imutáveis de chegada, roteamento, início e
+  conclusão do serviço, incluindo o estado básico do servidor quando
+  disponível;
 - testes unitários das validações, do ciclo de vida da requisição, do limite de
   capacidade, da ordem FIFO e do monitoramento.
 
@@ -30,9 +33,9 @@ O caso de 16 requisições simultâneas está coberto pelos testes: 15 iniciam e
 `t = 0` e a última inicia em `t = 0,05`.
 
 Ainda não há uma simulação completa com três servidores. Criação da rodada a
-partir da configuração, balanceador, políticas, tráfego Pareto, coletor central
-de métricas, logs configuráveis, experimentos, modelo analítico, CSVs e gráficos
-serão adicionados em etapas posteriores, conforme o
+partir da configuração, balanceador, políticas, tráfego Pareto, integração do
+coletor, cálculo das métricas, logs configuráveis, experimentos, modelo
+analítico, CSVs e gráficos serão adicionados em etapas posteriores, conforme o
 [plano de implementação](PLANO_IMPLEMENTACAO.md).
 
 ## Componentes implementados
@@ -40,6 +43,8 @@ serão adicionados em etapas posteriores, conforme o
 | Componente | Responsabilidade |
 | --- | --- |
 | `SimulationConfig` | Mantém e valida os parâmetros imutáveis de uma rodada. |
+| `MetricEvent` | Representa um evento observado pelo coletor. |
+| `MetricsCollector` | Preserva eventos e fotografias básicas dos servidores. |
 | `Request` | Mantém o ciclo de vida e os tempos de uma requisição. |
 | `Server` | Processa requisições concorrentemente e enfileira o excesso. |
 | `ServerState` | Representa uma fotografia imutável do estado do servidor. |
@@ -115,12 +120,14 @@ tempo ocorre no relógio simulado do SimPy.
 src/load_balancer_sim/
 ├── __init__.py
 ├── config.py
+├── metrics.py
 ├── request.py
 └── server.py
 
 tests/
 ├── test_config.py
 ├── test_environment.py
+├── test_metrics.py
 ├── test_request.py
 └── test_server.py
 ```
