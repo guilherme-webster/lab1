@@ -26,6 +26,8 @@ implementados:
 - coletor central com eventos imutáveis de chegada, roteamento, início e
   conclusão do serviço, incluindo o estado básico do servidor quando
   disponível;
+- resumo imutável de uma rodada com chegadas, conclusões, pendências,
+  throughput, tempo médio em fila e tempo médio de resposta;
 - testes unitários das validações, do ciclo de vida da requisição, do limite de
   capacidade, da ordem FIFO e do monitoramento.
 
@@ -34,8 +36,8 @@ O caso de 16 requisições simultâneas está coberto pelos testes: 15 iniciam e
 
 Ainda não há uma simulação completa com três servidores. Criação da rodada a
 partir da configuração, balanceador, políticas, tráfego Pareto, integração do
-coletor, cálculo das métricas, logs configuráveis, experimentos, modelo
-analítico, CSVs e gráficos serão adicionados em etapas posteriores, conforme o
+coletor, invariantes, logs configuráveis, experimentos, modelo analítico, CSVs
+e gráficos serão adicionados em etapas posteriores, conforme o
 [plano de implementação](PLANO_IMPLEMENTACAO.md).
 
 ## Componentes implementados
@@ -44,7 +46,8 @@ analítico, CSVs e gráficos serão adicionados em etapas posteriores, conforme 
 | --- | --- |
 | `SimulationConfig` | Mantém e valida os parâmetros imutáveis de uma rodada. |
 | `MetricEvent` | Representa um evento observado pelo coletor. |
-| `MetricsCollector` | Preserva eventos e fotografias básicas dos servidores. |
+| `MetricsCollector` | Preserva eventos e calcula as métricas de uma rodada. |
+| `RunMetrics` | Representa o resumo imutável de uma rodada. |
 | `Request` | Mantém o ciclo de vida e os tempos de uma requisição. |
 | `Server` | Processa requisições concorrentemente e enfileira o excesso. |
 | `ServerState` | Representa uma fotografia imutável do estado do servidor. |
@@ -52,6 +55,22 @@ analítico, CSVs e gráficos serão adicionados em etapas posteriores, conforme 
 O `Server` exige que a requisição já esteja atribuída ao seu identificador.
 Essa atribuição será responsabilidade do balanceador quando ele for
 implementado.
+
+## Métricas da rodada
+
+`MetricsCollector.calculate_run_metrics(horizon)` calcula as métricas usando
+somente os eventos da janela informada. Chegadas devem ocorrer antes do
+horizonte; conclusões exatamente no horizonte são contabilizadas.
+
+```text
+throughput = requisições concluídas / horizonte
+tempo em fila = início do serviço - chegada
+tempo de resposta = conclusão - chegada
+```
+
+As médias são `None` quando ainda não existe nenhuma observação aplicável.
+Verificações de consistência entre os eventos serão adicionadas com as
+invariantes da simulação.
 
 ## Requisitos
 
