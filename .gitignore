@@ -1,1 +1,20 @@
 commands.txt
+
+# Ambientes virtuais
+.venv/
+venv/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+
+# Testes e cobertura
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Resultados gerados pela simulacao
+results/

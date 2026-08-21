@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mc714-load-balancer"
+version = "0.1.0"
+description = "Simulacao de um balanceador de carga para a disciplina MC714"
+readme = "README.MD"
+requires-python = ">=3.11"
+dependencies = [
+    "simpy>=4.1,<5",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8,<10",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+addopts = "-ra"
+pythonpath = ["src"]
+testpaths = ["tests"]
