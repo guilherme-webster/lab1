@@ -1,6 +1,7 @@
 """Eventos basicos usados para coletar metricas da simulacao."""
 
 from dataclasses import dataclass
+from collections.abc import Callable
 from math import isfinite
 from statistics import fmean
 from typing import Literal
@@ -49,15 +50,23 @@ class MetricsCollector:
     """Armazena eventos na ordem em que foram observados.
 
     O coletor tambem resume os eventos ocorridos dentro de uma janela. A
-    validacao de invariantes e a emissao de logs pertencem a incrementos
-    posteriores.
+    validacao de invariantes ocorre separadamente. Um tratador opcional recebe
+    cada evento logo apos seu registro, permitindo emitir logs sem acoplar o
+    coletor a uma configuracao global.
     """
 
-    def __init__(self, environment: simpy.Environment) -> None:
+    def __init__(
+        self,
+        environment: simpy.Environment,
+        event_handler: Callable[[MetricEvent], None] | None = None,
+    ) -> None:
         if not isinstance(environment, simpy.Environment):
             raise TypeError("environment deve ser um simpy.Environment")
+        if event_handler is not None and not callable(event_handler):
+            raise TypeError("event_handler deve ser chamavel")
 
         self.environment = environment
+        self._event_handler = event_handler
         self._events: list[MetricEvent] = []
 
     @property
@@ -147,17 +156,18 @@ class MetricsCollector:
         if server is not None and not isinstance(server, Server):
             raise TypeError("server deve ser um Server")
 
-        self._events.append(
-            MetricEvent(
-                time=float(self.environment.now),
-                event=event,
-                request_id=request.id,
-                burst_id=request.burst_id,
-                server_id=None if server is None else server.id,
-                active_count=None if server is None else server.active_count,
-                waiting_count=None if server is None else server.waiting_count,
-            )
+        metric_event = MetricEvent(
+            time=float(self.environment.now),
+            event=event,
+            request_id=request.id,
+            burst_id=request.burst_id,
+            server_id=None if server is None else server.id,
+            active_count=None if server is None else server.active_count,
+            waiting_count=None if server is None else server.waiting_count,
         )
+        self._events.append(metric_event)
+        if self._event_handler is not None:
+            self._event_handler(metric_event)
 
 
 def _positive_horizon(value: float) -> float:
