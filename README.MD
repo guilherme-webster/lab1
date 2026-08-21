@@ -30,6 +30,8 @@ implementados:
   throughput, tempo médio em fila e tempo médio de resposta;
 - validação das invariantes de topologia, capacidade, ciclo de vida das
   requisições, janela de medição e conservação do sistema;
+- logs estruturados em `INFO` para configuração e resumo da rodada e em
+  `DEBUG` para cada evento registrado pelo coletor;
 - testes unitários das validações, do ciclo de vida da requisição, do limite de
   capacidade, da ordem FIFO e do monitoramento.
 
@@ -38,8 +40,8 @@ O caso de 16 requisições simultâneas está coberto pelos testes: 15 iniciam e
 
 Ainda não há uma simulação completa com três servidores. Criação da rodada a
 partir da configuração, balanceador, políticas, tráfego Pareto, integração do
-coletor, logs configuráveis, experimentos, modelo analítico, CSVs e gráficos
-serão adicionados em etapas posteriores, conforme o
+coletor, experimentos, modelo analítico, CSVs e gráficos serão adicionados em
+etapas posteriores, conforme o
 [plano de implementação](PLANO_IMPLEMENTACAO.md).
 
 ## Componentes implementados
@@ -51,6 +53,7 @@ serão adicionados em etapas posteriores, conforme o
 | `MetricsCollector` | Preserva eventos e calcula as métricas de uma rodada. |
 | `RunMetrics` | Representa o resumo imutável de uma rodada. |
 | `validate_simulation_invariants` | Valida configuração, servidores e eventos. |
+| `SimulationLogger` | Emite configuração, eventos e resumo nos níveis adequados. |
 | `Request` | Mantém o ciclo de vida e os tempos de uma requisição. |
 | `Server` | Processa requisições concorrentemente e enfileira o excesso. |
 | `ServerState` | Representa uma fotografia imutável do estado do servidor. |
@@ -89,6 +92,35 @@ Ao final de uma rodada,
 Uma violação lança `SimulationInvariantError`. Eventos de conclusão posteriores
 ao horizonte, gerados por uma eventual fase de drenagem, não alteram a
 validação da janela oficial.
+
+## Logs estruturados
+
+O nível `INFO` registra a configuração no início e as métricas no fim de uma
+rodada. O nível `DEBUG` acrescenta um cabeçalho e uma linha por evento:
+
+```text
+time,event,request_id,burst_id,server_id,active,queue_length
+```
+
+O coletor pode encaminhar cada novo evento diretamente ao logger:
+
+```python
+import logging
+import simpy
+
+from load_balancer_sim import MetricsCollector, SimulationLogger
+
+logging.basicConfig(level=logging.DEBUG, format="%(levelname)s %(message)s")
+simulation_logger = SimulationLogger()
+collector = MetricsCollector(
+    simpy.Environment(),
+    event_handler=simulation_logger.log_event,
+)
+```
+
+Ao montar uma rodada, chamar `log_run_started(config)` antes da execução e
+`log_run_completed(metrics)` depois do cálculo das métricas. A futura CLI será
+responsável por escolher entre `INFO` e `DEBUG`.
 
 ## Requisitos
 
@@ -158,6 +190,7 @@ src/load_balancer_sim/
 ├── __init__.py
 ├── config.py
 ├── invariants.py
+├── logs.py
 ├── metrics.py
 ├── request.py
 └── server.py
@@ -166,6 +199,7 @@ tests/
 ├── test_config.py
 ├── test_environment.py
 ├── test_invariants.py
+├── test_logs.py
 ├── test_metrics.py
 ├── test_request.py
 └── test_server.py
