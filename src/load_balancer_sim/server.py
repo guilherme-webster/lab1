@@ -1,11 +1,33 @@
 """Servidor de processamento usado na simulacao."""
 
+from dataclasses import dataclass
 from math import isfinite
-from typing import Generator
+from typing import Generator, Literal
 
 import simpy
 
 from load_balancer_sim.request import Request
+
+
+ServerEvent = Literal[
+    "initialized",
+    "request_received",
+    "service_started",
+    "service_completed",
+]
+
+
+@dataclass(frozen=True, slots=True)
+class ServerState:
+    """Fotografia imutavel do estado de um servidor em um evento."""
+
+    time: float
+    event: ServerEvent
+    server_id: int
+    request_id: int | None
+    active_count: int
+    waiting_count: int
+    completed_count: int
 
 
 def _positive_integer(value: int, field_name: str) -> int:
@@ -63,6 +85,11 @@ class Server:
             environment,
             capacity=_positive_integer(capacity, "capacity"),
         )
+        self._completed_count = 0
+        self._maximum_active_count = 0
+        self._maximum_waiting_count = 0
+        self._state_history: list[ServerState] = []
+        self._record_state("initialized")
 
     @property
     def capacity(self) -> int:
@@ -79,6 +106,52 @@ class Server:
         """Quantidade de requisicoes aguardando um slot de processamento."""
         return len(self._resource.queue)
 
+    @property
+    def completed_count(self) -> int:
+        """Quantidade de requisicoes concluidas por este servidor."""
+        return self._completed_count
+
+    @property
+    def maximum_active_count(self) -> int:
+        """Maior quantidade observada de requisicoes simultaneas."""
+        return self._maximum_active_count
+
+    @property
+    def maximum_waiting_count(self) -> int:
+        """Maior comprimento observado da fila de espera."""
+        return self._maximum_waiting_count
+
+    @property
+    def state_history(self) -> tuple[ServerState, ...]:
+        """Historico de estados, protegido contra alteracoes externas."""
+        return tuple(self._state_history)
+
+    def _record_state(
+        self,
+        event: ServerEvent,
+        request_id: int | None = None,
+    ) -> None:
+        """Registra o estado corrente e atualiza os maximos observados."""
+        self._maximum_active_count = max(
+            self._maximum_active_count,
+            self.active_count,
+        )
+        self._maximum_waiting_count = max(
+            self._maximum_waiting_count,
+            self.waiting_count,
+        )
+        self._state_history.append(
+            ServerState(
+                time=float(self.environment.now),
+                event=event,
+                server_id=self.id,
+                request_id=request_id,
+                active_count=self.active_count,
+                waiting_count=self.waiting_count,
+                completed_count=self.completed_count,
+            )
+        )
+
     def handle(self, request: Request) -> Generator[simpy.Event, None, None]:
         """Atende uma requisicao previamente atribuida a este servidor."""
         if not isinstance(request, Request):
@@ -87,7 +160,12 @@ class Server:
             raise ValueError("a requisicao deve estar atribuida a este servidor")
 
         with self._resource.request() as slot:
+            self._record_state("request_received", request.id)
             yield slot
             request.mark_service_started(self.environment.now)
+            self._record_state("service_started", request.id)
             yield self.environment.timeout(self.service_time)
             request.mark_completed(self.environment.now)
+
+        self._completed_count += 1
+        self._record_state("service_completed", request.id)
