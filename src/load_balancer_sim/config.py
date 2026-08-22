@@ -5,13 +5,18 @@ from math import isfinite
 from typing import Literal
 
 
-PolicyName = Literal["random", "round_robin", "shortest_queue"]
+PolicyName = Literal[
+    "random", 
+    "round_robin", 
+    "shortest_queue"
+]
 
 SUPPORTED_POLICIES: tuple[PolicyName, ...] = (
     "random",
     "round_robin",
     "shortest_queue",
 )
+
 SUPPORTED_BURST_MAX_VALUES = (30, 60, 90, 120)
 
 
