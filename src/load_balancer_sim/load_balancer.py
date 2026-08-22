@@ -107,6 +107,3 @@ class LoadBalancer:
         self.environment.process(server.handle(request))
 
         return server
-
-
-    
