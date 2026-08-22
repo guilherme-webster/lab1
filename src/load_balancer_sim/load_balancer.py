@@ -1,10 +1,10 @@
-import simpy
-
 from __future__ import annotations
+
 
 from dataclasses import dataclass
 from random import Random 
 from typing import Protocol
+import simpy
 
 from load_balancer_sim.server import Server
 from load_balancer_sim.config import PolicyName, SimulationConfig
@@ -82,7 +82,7 @@ class LoadBalancer:
         environment: simpy.Environment,
         servers: list[Server],
         policy: PolicyName = "round_robin",
-        simulation_config: SimulationConfig | None = None,
+        **kwargs: object,
     ):
         if not isinstance(environment, simpy.Environment):
             raise TypeError("environment deve ser um simpy.Environment")
@@ -92,10 +92,10 @@ class LoadBalancer:
         self.environment = environment
         self.servers = servers
         self.policy = policy
-        self.simulation_config = simulation_config
+        self.simulation_config = kwargs.get("simulation_config")
 
-    def __post_init__(self):
         self.routing_policy = build_policy(self.policy, self.simulation_config.seed if self.simulation_config else None)
+
 
     def route_request(
         self,
