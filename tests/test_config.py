@@ -15,8 +15,7 @@ def test_config_uses_project_defaults() -> None:
     assert config.server_count == 3
     assert config.server_capacity == 15
     assert config.service_time == 0.05
-    assert config.burst_max == 30
-    assert config.hurst == 0.8
+    assert config.arrival_rate == 1.0
     assert config.horizon == 200.0
     assert config.seed == 12345
 
@@ -29,10 +28,10 @@ def test_config_accepts_every_supported_policy(policy: str) -> None:
 
 
 def test_config_normalizes_numeric_durations() -> None:
-    config = SimulationConfig(service_time=1, hurst=0.5, horizon=10)
+    config = SimulationConfig(service_time=1, arrival_rate=2, horizon=10)
 
     assert config.service_time == 1.0
-    assert config.hurst == 0.5
+    assert config.arrival_rate == 2.0
     assert config.horizon == 10.0
 
 
@@ -55,11 +54,9 @@ def test_config_is_immutable() -> None:
         ("service_time", 0, ValueError),
         ("service_time", math.inf, ValueError),
         ("service_time", "0.05", TypeError),
-        ("burst_max", 20, ValueError),
-        ("burst_max", 30.0, TypeError),
-        ("hurst", 0, ValueError),
-        ("hurst", 1, ValueError),
-        ("hurst", math.nan, ValueError),
+        ("arrival_rate", 0, ValueError),
+        ("arrival_rate", math.inf, ValueError),
+        ("arrival_rate", "1.0", TypeError),
         ("horizon", 0, ValueError),
         ("horizon", math.inf, ValueError),
         ("seed", -1, ValueError),

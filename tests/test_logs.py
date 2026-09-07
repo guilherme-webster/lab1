@@ -31,8 +31,7 @@ def test_run_start_logs_configuration_at_info(
 
     assert _captured_messages(caplog) == [
         "run_started,policy=round_robin,server_count=3,server_capacity=15,"
-        "service_time=0.050000,burst_max=30,hurst=0.800000,"
-        "horizon=200.000000,seed=12345",
+        "service_time=0.050000,arrival_rate=1.000000,horizon=200.000000,seed=12345",
         EVENT_LOG_HEADER,
     ]
     assert [record.levelno for record in caplog.records] == [

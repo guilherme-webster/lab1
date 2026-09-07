@@ -17,8 +17,6 @@ SUPPORTED_POLICIES: tuple[PolicyName, ...] = (
     "shortest_queue",
 )
 
-SUPPORTED_BURST_MAX_VALUES = (30, 60, 90, 120)
-
 
 def _positive_integer(value: int, field_name: str) -> int:
     """Valida um parametro inteiro estritamente positivo."""
@@ -59,8 +57,7 @@ class SimulationConfig:
     server_count: int = 3
     server_capacity: int = 15
     service_time: float = 0.05
-    burst_max: int = 30
-    hurst: float = 0.8
+    arrival_rate: float = 1.0
     horizon: float = 200.0
     seed: int = 12345
 
@@ -77,18 +74,11 @@ class SimulationConfig:
             "service_time",
             _positive_number(self.service_time, "service_time"),
         )
-
-        if isinstance(self.burst_max, bool) or not isinstance(self.burst_max, int):
-            raise TypeError("burst_max deve ser um numero inteiro")
-        if self.burst_max not in SUPPORTED_BURST_MAX_VALUES:
-            raise ValueError(
-                f"burst_max deve pertencer a {SUPPORTED_BURST_MAX_VALUES}"
-            )
-
-        normalized_hurst = _positive_number(self.hurst, "hurst")
-        if normalized_hurst >= 1:
-            raise ValueError("hurst deve ser menor que 1")
-        object.__setattr__(self, "hurst", normalized_hurst)
+        object.__setattr__(
+            self,
+            "arrival_rate",
+            _positive_number(self.arrival_rate, "arrival_rate"),
+        )
 
         object.__setattr__(
             self,

@@ -27,13 +27,12 @@ class SimulationLogger:
 
         self.logger.info(
             "run_started,policy=%s,server_count=%d,server_capacity=%d,"
-            "service_time=%.6f,burst_max=%d,hurst=%.6f,horizon=%.6f,seed=%d",
+            "service_time=%.6f,arrival_rate=%.6f,horizon=%.6f,seed=%d",
             config.policy,
             config.server_count,
             config.server_capacity,
             config.service_time,
-            config.burst_max,
-            config.hurst,
+            config.arrival_rate,
             config.horizon,
             config.seed,
         )
