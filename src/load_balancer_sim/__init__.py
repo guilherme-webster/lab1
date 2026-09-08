@@ -6,7 +6,15 @@ from load_balancer_sim.invariants import (
     validate_simulation_invariants,
 )
 from load_balancer_sim.logs import EVENT_LOG_HEADER, SimulationLogger
+from load_balancer_sim.load_balancer import LoadBalancer
 from load_balancer_sim.metrics import MetricEvent, MetricsCollector, RunMetrics
+from load_balancer_sim.policies import (
+    RandomPolicy,
+    RoundRobinPolicy,
+    RoutingPolicy,
+    ShortestQueuePolicy,
+    build_policy,
+)
 from load_balancer_sim.request import Request
 from load_balancer_sim.server import (
     Server,
@@ -24,10 +32,14 @@ __version__ = "0.1.0"
 
 __all__ = [
     "EVENT_LOG_HEADER",
+    "LoadBalancer",
     "MetricEvent",
     "MetricsCollector",
     "Request",
+    "RandomPolicy",
+    "RoundRobinPolicy",
     "RunMetrics",
+    "RoutingPolicy",
     "Server",
     "ServerEventCallback",
     "ServerState",
@@ -35,9 +47,11 @@ __all__ = [
     "SimulationConfig",
     "SimulationInvariantError",
     "SimulationLogger",
+    "ShortestQueuePolicy",
     "PoissonTrafficGenerator",
     "generate_poisson_arrival_times",
     "poisson_arrival_process",
     "__version__",
+    "build_policy",
     "validate_simulation_invariants",
 ]

@@ -33,19 +33,17 @@ Já estão implementados:
 - invariantes de topologia, capacidade, eventos e conservação;
 - logs estruturados de configuração, eventos e resumo;
 - `LoadBalancer`;
-- políticas Aleatória, Round Robin e Fila Mais Curta;
+- políticas Aleatória, Round Robin e Fila Mais Curta em módulo próprio, com
+  sementes reproduzíveis e desempates aleatórios;
 - gerador de chegadas Poisson reproduzível;
 - testes unitários e teste de integração do ciclo completo de uma requisição;
 - notebooks de configuração e integração.
 
-Em 8 de setembro de 2026, a suíte possui **138 testes aprovados**.
+Em 8 de setembro de 2026, a suíte possui **168 testes aprovados**.
 
 ## Alinhamentos ainda necessários
 
-O código ainda precisa alinhar a Fila Mais Curta ao desempate aleatório exigido
-pelo enunciado.
-
-Também faltam:
+Ainda faltam:
 
 - aplicação do warm-up e cálculo temporal de `E[N]` e utilização por servidor;
 - executor completo de uma rodada;
@@ -65,10 +63,10 @@ rajadas de 30 a 120 não fazem mais parte dos requisitos vigentes.
 | `Request` | Mantém IDs, chegada, atribuição, início, conclusão e tempos derivados. |
 | `Server` | Sorteia serviços exponenciais, mantém fila FIFO e publica callbacks de início e conclusão. |
 | `ServerState` | Fotografia imutável do estado de um servidor. |
-| `LoadBalancer` | Seleciona um servidor pela política e inicia o atendimento. |
+| `LoadBalancer` | Valida servidores e requisições, seleciona um servidor e inicia o atendimento. |
 | `RandomPolicy` | Escolhe um servidor pseudoaleatoriamente. |
 | `RoundRobinPolicy` | Distribui requisições ciclicamente. |
-| `ShortestQueuePolicy` | Escolhe a menor ocupação; o desempate ainda será ajustado. |
+| `ShortestQueuePolicy` | Escolhe a menor ocupação e desempata pseudoaleatoriamente. |
 | `PoissonTrafficGenerator` | Produz chegadas Poisson no ambiente SimPy. |
 | `MetricsCollector` | Preserva eventos e calcula as métricas atualmente disponíveis. |
 | `RunMetrics` | Resumo imutável de uma rodada. |
@@ -138,6 +136,7 @@ src/load_balancer_sim/
 ├── load_balancer.py
 ├── logs.py
 ├── metrics.py
+├── policies.py
 ├── request.py
 ├── server.py
 └── traffic.py
@@ -149,6 +148,7 @@ tests/
 ├── test_load_balancer.py
 ├── test_logs.py
 ├── test_metrics.py
+├── test_policies.py
 ├── test_request.py
 ├── test_server.py
 └── test_traffic.py
@@ -159,6 +159,6 @@ simulação deve residir nos módulos do pacote, sem acessar atributos privados.
 
 ## Próximo commit técnico
 
-O próximo marco é alinhar as políticas e o balanceador: separar as políticas em
-um módulo próprio, reforçar validações, remover `**kwargs` e tornar aleatório o
-desempate da política de Fila Mais Curta.
+O próximo marco é implementar as métricas temporais: número médio de
+requisições no sistema, utilização individual dos servidores e recorte correto
+da janela de medição após o warm-up.

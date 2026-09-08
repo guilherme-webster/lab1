@@ -119,28 +119,23 @@ Consequentemente, Pareto, Hurst, rajadas, capacidade 15, serviço constante de
   warm-up 500;
 - entidade `Request` com ciclo de vida e tempos derivados;
 - `Server` baseado em `simpy.Resource`, fila FIFO, serviço exponencial
-  reproduzível, sampler injetável e histórico de estados;
+  reproduzível, sampler injetável, histórico de estados e callbacks públicos;
 - `MetricsCollector`, `RunMetrics` e eventos imutáveis;
 - invariantes de topologia, capacidade, ciclo de vida e conservação;
 - logs estruturados em `INFO` e `DEBUG`;
-- políticas Aleatória, Round Robin e Fila Mais Curta;
-- `LoadBalancer` que atribui e encaminha requisições;
+- políticas Aleatória, Round Robin e Fila Mais Curta em módulo próprio, com
+  sementes reproduzíveis e desempate correto;
+- `LoadBalancer` que valida, atribui e encaminha requisições;
 - gerador Poisson reproduzível e processo de chegada integrado ao SimPy;
-- 134 testes automatizados aprovados em 8 de setembro de 2026;
+- 168 testes automatizados aprovados em 8 de setembro de 2026;
 - notebooks de integração e configuração.
 
 ### Desalinhamentos com o enunciado vigente
 
 - as métricas ainda não aplicam o warm-up nem calculam `E[N]` por integração
   temporal ou `U_i`;
-- Fila Mais Curta possui desempate determinístico pelo primeiro servidor, mas
-  o novo enunciado exige desempate aleatório;
-- a integração completa existe apenas em notebook e depende de monkey patch de
-  membros privados do servidor;
 - não existem `simulation.py`, executor das 150 rodadas, modelo analítico,
   exportação CSV, gráficos ou CLI;
-- o notebook de configuração ainda contém trechos baseados no comportamento
-  antigo.
 
 ## 4. Arquitetura alvo
 
@@ -352,7 +347,7 @@ a mesma semente reproduz os valores e os testes de FCFS continuam passando.
 **Pronto quando:** o ciclo `arrival -> routing -> service_started ->
 service_completed` é coletado automaticamente em um teste de integração.
 
-### Commit 3 - Políticas e balanceador alinhados
+### Commit 3 - Políticas e balanceador alinhados - concluído
 
 - separar as políticas em `policies.py`;
 - validar servidores, ambientes e requisições;
@@ -468,7 +463,7 @@ Checklist obrigatório:
 - [x] Filas FCFS ilimitadas.
 - [x] Chegadas Poisson reproduzíveis.
 - [x] Serviço exponencial com `mu=1`.
-- [ ] Três políticas configuráveis e desempate correto.
+- [x] Três políticas configuráveis e desempate correto.
 - [ ] Horizonte 5000 e warm-up 500.
 - [ ] Cinco taxas estáveis, três políticas e dez réplicas: 150 execuções.
 - [ ] Média e IC de 95%.

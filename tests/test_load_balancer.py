@@ -1,128 +1,174 @@
-"""Testes iniciais para a classe LoadBalancer.
-
-Este arquivo serve como base para expandir os cenarios de politicas de
-roteamento (random, round_robin e shortest_queue).
-"""
+"""Testes do balanceador e de seus contratos de entrada."""
 
 import pytest
 import simpy
 
-from load_balancer_sim.load_balancer import LoadBalancer, RoundRobinPolicy, build_policy
-from load_balancer_sim.request import Request
-from load_balancer_sim.server import Server
+from load_balancer_sim import LoadBalancer, Request, Server
 
 
-def _make_servers(environment: simpy.Environment, count: int = 3) -> list[Server]:
-	"""Cria servidores padrao para os cenarios de teste."""
-	return [
-		Server(
-			environment,
-			server_id=index,
-			service_time_sampler=lambda _: 0.05,
-		)
-		for index in range(count)
-	]
-
-
-def _build_ready_load_balancer(
-	environment: simpy.Environment,
-	policy: str = "round_robin",
-) -> LoadBalancer:
-	"""Monta o balanceador e inicializa a politica para os testes."""
-	load_balancer = LoadBalancer(
-		environment, 
-		_make_servers(environment), 
-		policy=policy
-	)  # type: ignore[arg-type]
-	return load_balancer
+def _make_servers(
+    environment: simpy.Environment,
+    count: int = 3,
+) -> list[Server]:
+    """Cria servidores rapidos e deterministicos para os testes."""
+    return [
+        Server(
+            environment,
+            server_id=index,
+            service_time_sampler=lambda _: 0.05,
+        )
+        for index in range(count)
+    ]
 
 
 def test_load_balancer_routes_and_completes_one_request() -> None:
-	"""Teste semente: roteia uma requisicao e finaliza seu ciclo de vida."""
-	environment = simpy.Environment()
-	load_balancer = _build_ready_load_balancer(environment)
-	request = Request(id=0, burst_id=0, arrival_time=environment.now)
+    environment = simpy.Environment()
+    load_balancer = LoadBalancer(environment, _make_servers(environment))
+    request = Request(id=0, burst_id=0, arrival_time=environment.now)
 
-	selected_server = load_balancer.route_request(request)
-	environment.run()
+    selected_server = load_balancer.route_request(request)
+    environment.run()
 
-	assert selected_server.id == 0
-	assert request.assigned_server == 0
-	assert request.service_start_time == 0.0
-	assert request.completion_time == pytest.approx(0.05)
-
-
-def test_round_robin_policy_cycles_across_servers() -> None:
-	"""Garante distribuicao ciclica para usar como base de testes da politica."""
-	environment = simpy.Environment()
-	servers = _make_servers(environment)
-	policy = RoundRobinPolicy()
-
-	selected_ids = [
-		policy.select_server(
-			Request(id=index, burst_id=0, arrival_time=0.0),
-			servers,
-		).id
-		for index in range(5)
-	]
-
-	assert selected_ids == [0, 1, 2, 0, 1]
+    assert selected_server.id == 0
+    assert request.assigned_server == 0
+    assert request.service_start_time == 0.0
+    assert request.completion_time == pytest.approx(0.05)
 
 
-def test_shortest_queue_policy_selects_least_loaded_server() -> None:
-    """Valida que a politica shortest_queue seleciona o servidor com menos carga."""
+def test_load_balancer_protects_server_collection_from_external_changes() -> None:
     environment = simpy.Environment()
     servers = _make_servers(environment)
-    load_balancer = LoadBalancer(environment, servers, policy="shortest_queue")
-    eps = 0.001
+    load_balancer = LoadBalancer(environment, servers)
 
-    # Inicialmente todos os servidores estao vazios
-    selected_server_1 = load_balancer.route_request(
-        Request(id=0, burst_id=0, arrival_time=0.0)
-    )
+    servers.clear()
 
-    # É necessário avançar o tempo para que o servidor 0 seja ocupado.
-    environment.run(until=eps)
-
-    assert selected_server_1.id == 0
-
-    # O servidor 0 agora esta ocupado, entao o proximo deve ser o servidor 1
-    selected_server_2 = load_balancer.route_request(
-        Request(id=1, burst_id=0, arrival_time=0.0)
-    )
-    environment.run(until=2*eps)
-    assert selected_server_2.id == 1
-
-    # O servidor 2 ainda esta vazio, entao ele deve ser selecionado
-    selected_server_3 = load_balancer.route_request(
-        Request(id=2, burst_id=0, arrival_time=0.0)
-    )
-    assert selected_server_3.id == 2
+    assert len(load_balancer.servers) == 3
+    assert isinstance(load_balancer.servers, tuple)
 
 
-def test_random_policy_selects_servers() -> None:
-    """Valida que a politica randomica seleciona servidores dentro do conjunto."""
+def test_load_balancer_rejects_invalid_environment() -> None:
+    with pytest.raises(TypeError, match="environment"):
+        LoadBalancer(object(), [])  # type: ignore[arg-type]
+
+
+@pytest.mark.parametrize(
+    "servers",
+    [
+        [],
+        [object()],
+    ],
+)
+def test_load_balancer_rejects_invalid_server_collections(
+    servers: list[object],
+) -> None:
     environment = simpy.Environment()
-    servers = _make_servers(environment)
-    load_balancer = LoadBalancer(environment, servers, policy="random")
 
-    selected_ids = [
-        load_balancer.route_request(
-            Request(id=index, burst_id=0, arrival_time=0.0)
-        ).id
-        for index in range(10)
+    with pytest.raises((TypeError, ValueError), match="servers"):
+        LoadBalancer(environment, servers)  # type: ignore[arg-type]
+
+
+def test_load_balancer_requires_a_server_sequence() -> None:
+    environment = simpy.Environment()
+
+    with pytest.raises(TypeError, match="servers"):
+        LoadBalancer(environment, iter(_make_servers(environment)))  # type: ignore[arg-type]
+
+
+def test_load_balancer_rejects_servers_from_another_environment() -> None:
+    environment = simpy.Environment()
+    foreign_server = Server(simpy.Environment(), server_id=0)
+
+    with pytest.raises(ValueError, match="ambiente"):
+        LoadBalancer(environment, [foreign_server])
+
+
+def test_load_balancer_rejects_duplicate_server_ids() -> None:
+    environment = simpy.Environment()
+    servers = [
+        Server(environment, server_id=0),
+        Server(environment, server_id=0),
     ]
 
-    assert set(selected_ids).issubset({0, 1, 2})
+    with pytest.raises(ValueError, match="identificadores"):
+        LoadBalancer(environment, servers)
 
 
-def test_load_balancer_rejects_empty_server_list() -> None:
-	"""Valida contrato basico de construcao do balanceador."""
-	with pytest.raises(ValueError, match="servers"):
-		LoadBalancer(simpy.Environment(), [], policy="round_robin")
+@pytest.mark.parametrize(
+    ("policy", "expected_exception"),
+    [
+        ("least_connections", ValueError),
+        (1, TypeError),
+    ],
+)
+def test_load_balancer_rejects_invalid_policy(
+    policy: object,
+    expected_exception: type[Exception],
+) -> None:
+    environment = simpy.Environment()
+
+    with pytest.raises(expected_exception, match="politica|policy"):
+        LoadBalancer(
+            environment,
+            _make_servers(environment),
+            policy=policy,  # type: ignore[arg-type]
+        )
 
 
-def test_build_policy_rejects_unknown_policy() -> None:
-	"""Garante erro claro para politicas nao suportadas."""
-	with pytest.raises(ValueError, match="politica desconhecida"):
-		build_policy("least_connections")  # type: ignore[arg-type]
+@pytest.mark.parametrize(
+    ("seed", "expected_exception"),
+    [
+        (-1, ValueError),
+        (1.5, TypeError),
+        (True, TypeError),
+    ],
+)
+def test_load_balancer_rejects_invalid_seed(
+    seed: object,
+    expected_exception: type[Exception],
+) -> None:
+    environment = simpy.Environment()
+
+    with pytest.raises(expected_exception, match="seed"):
+        LoadBalancer(
+            environment,
+            _make_servers(environment),
+            seed=seed,  # type: ignore[arg-type]
+        )
+
+
+def test_load_balancer_rejects_removed_simulation_config_argument() -> None:
+    environment = simpy.Environment()
+
+    with pytest.raises(TypeError, match="simulation_config"):
+        LoadBalancer(
+            environment,
+            _make_servers(environment),
+            simulation_config=object(),  # type: ignore[call-arg]
+        )
+
+
+def test_load_balancer_rejects_invalid_request() -> None:
+    environment = simpy.Environment()
+    load_balancer = LoadBalancer(environment, _make_servers(environment))
+
+    with pytest.raises(TypeError, match="request"):
+        load_balancer.route_request(object())  # type: ignore[arg-type]
+
+
+def test_load_balancer_rejects_request_that_has_not_arrived() -> None:
+    environment = simpy.Environment()
+    load_balancer = LoadBalancer(environment, _make_servers(environment))
+    request = Request(id=0, burst_id=0, arrival_time=1.0)
+
+    with pytest.raises(ValueError, match="ainda nao chegou"):
+        load_balancer.route_request(request)
+
+
+def test_load_balancer_rejects_request_routed_twice() -> None:
+    environment = simpy.Environment()
+    load_balancer = LoadBalancer(environment, _make_servers(environment))
+    request = Request(id=0, burst_id=0, arrival_time=0.0)
+    load_balancer.route_request(request)
+
+    with pytest.raises(RuntimeError, match="ja foi roteada"):
+        load_balancer.route_request(request)
