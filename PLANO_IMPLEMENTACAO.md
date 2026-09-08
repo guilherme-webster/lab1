@@ -128,13 +128,15 @@ Consequentemente, Pareto, Hurst, rajadas, capacidade 15, serviço constante de
   sementes reproduzíveis e desempate correto;
 - `LoadBalancer` que valida, atribui e encaminha requisições;
 - gerador Poisson reproduzível e processo de chegada integrado ao SimPy;
-- 179 testes automatizados aprovados em 8 de setembro de 2026;
+- traço imutável de chegadas e demandas, independente da política;
+- executor completo de uma rodada com métricas, invariantes e logs;
+- 206 testes automatizados aprovados em 8 de setembro de 2026;
 - notebooks de integração e configuração.
 
 ### Desalinhamentos com o enunciado vigente
 
-- não existem `simulation.py`, executor das 150 rodadas, modelo analítico,
-  exportação CSV, gráficos ou CLI;
+- não existem executor das 150 rodadas, modelo analítico, exportação CSV,
+  gráficos ou CLI;
 
 ## 4. Arquitetura alvo
 
@@ -361,7 +363,7 @@ service_completed` é coletado automaticamente em um teste de integração.
 - aplicar corretamente o recorte `[500, 5000)`;
 - testar integrais com trajetórias pequenas calculadas manualmente.
 
-### Commit 5 - Executor de uma rodada
+### Commit 5 - Executor de uma rodada - concluído
 
 Criar `simulation.py` para montar configuração, ambiente, três servidores,
 balanceador, traço, coletor e logger. A execução deve retornar um objeto

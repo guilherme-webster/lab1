@@ -27,6 +27,14 @@ from load_balancer_sim.server import (
     ServerState,
     ServiceTimeSampler,
 )
+from load_balancer_sim.simulation import (
+    RequestTraceEntry,
+    RunSeeds,
+    SimulationResult,
+    derive_run_seeds,
+    generate_request_trace,
+    run_simulation,
+)
 from load_balancer_sim.traffic import (
     PoissonTrafficGenerator,
     generate_poisson_arrival_times,
@@ -41,9 +49,11 @@ __all__ = [
     "MetricEvent",
     "MetricsCollector",
     "Request",
+    "RequestTraceEntry",
     "RandomPolicy",
     "RoundRobinPolicy",
     "RunMetrics",
+    "RunSeeds",
     "RoutingPolicy",
     "Server",
     "ServerEventCallback",
@@ -53,11 +63,15 @@ __all__ = [
     "SimulationConfig",
     "SimulationInvariantError",
     "SimulationLogger",
+    "SimulationResult",
     "ShortestQueuePolicy",
     "PoissonTrafficGenerator",
     "generate_poisson_arrival_times",
     "poisson_arrival_process",
     "__version__",
     "build_policy",
+    "derive_run_seeds",
+    "generate_request_trace",
+    "run_simulation",
     "validate_simulation_invariants",
 ]

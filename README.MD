@@ -38,16 +38,18 @@ Já estão implementados:
 - políticas Aleatória, Round Robin e Fila Mais Curta em módulo próprio, com
   sementes reproduzíveis e desempates aleatórios;
 - gerador de chegadas Poisson reproduzível;
+- geração antecipada de traços imutáveis com chegada e duração de serviço;
+- executor de uma rodada completa com sementes independentes, invariantes,
+  métricas e logs;
 - testes unitários e teste de integração do ciclo completo de uma requisição;
 - notebooks de configuração e integração.
 
-Em 8 de setembro de 2026, a suíte possui **179 testes aprovados**.
+Em 8 de setembro de 2026, a suíte possui **206 testes aprovados**.
 
 ## Alinhamentos ainda necessários
 
 Ainda faltam:
 
-- executor completo de uma rodada;
 - executor das 150 rodadas estáveis;
 - modelo analítico `M/M/1`;
 - experimento instável com `lambda=3,3`;
@@ -69,10 +71,13 @@ rajadas de 30 a 120 não fazem mais parte dos requisitos vigentes.
 | `RoundRobinPolicy` | Distribui requisições ciclicamente. |
 | `ShortestQueuePolicy` | Escolhe a menor ocupação e desempata pseudoaleatoriamente. |
 | `PoissonTrafficGenerator` | Produz chegadas Poisson no ambiente SimPy. |
+| `RequestTraceEntry` | Preserva chegada e duração de serviço de uma requisição. |
 | `MetricsCollector` | Preserva eventos e calcula métricas na janela `[warmup, horizon)`. |
 | `RunMetrics` | Resume vazão, tempos, `E[N]` e utilizações de uma rodada. |
 | `ServerUtilization` | Associa a utilização temporal ao identificador do servidor. |
 | `SimulationLogger` | Emite configuração, eventos e resumo. |
+| `run_simulation` | Monta, executa e valida uma rodada completa. |
+| `SimulationResult` | Reúne configuração, sementes, traço, métricas e eventos. |
 | `validate_simulation_invariants` | Valida topologia, ciclos de vida e conservação. |
 
 ## Preparação do ambiente
@@ -145,6 +150,20 @@ Eventos anteriores ao warm-up atualizam o estado inicial da integração, mas
 não acumulam área. Eventos exatamente no warm-up são incluídos; eventos no
 horizonte são excluídos.
 
+## Execução de uma rodada
+
+Uma rodada completa pode ser executada diretamente a partir da configuração:
+
+```python
+from load_balancer_sim import SimulationConfig, run_simulation
+
+result = run_simulation(SimulationConfig())
+print(result.metrics)
+```
+
+`result.trace` pode ser fornecido novamente a `run_simulation` com outra
+política. Isso conserva os mesmos instantes de chegada e demandas de serviço.
+
 ## Estrutura atual
 
 ```text
@@ -158,6 +177,7 @@ src/load_balancer_sim/
 ├── policies.py
 ├── request.py
 ├── server.py
+├── simulation.py
 └── traffic.py
 
 tests/
@@ -170,6 +190,7 @@ tests/
 ├── test_policies.py
 ├── test_request.py
 ├── test_server.py
+├── test_simulation.py
 └── test_traffic.py
 ```
 
@@ -178,5 +199,5 @@ simulação deve residir nos módulos do pacote, sem acessar atributos privados.
 
 ## Próximo commit técnico
 
-O próximo marco é criar `simulation.py`, responsável por montar e executar uma
-rodada completa e retornar métricas, eventos e metadados de semente.
+O próximo marco é executar as 150 rodadas estáveis, reutilizar o mesmo traço
+entre políticas, agregar resultados e calcular intervalos de confiança de 95%.
