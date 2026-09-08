@@ -115,25 +115,24 @@ Consequentemente, Pareto, Hurst, rajadas, capacidade 15, serviço constante de
 ### Já implementado
 
 - pacote Python instalável com SimPy e pytest;
-- `SimulationConfig` imutável e validada;
+- `SimulationConfig` imutável com capacidade 1, `mu=1`, horizonte 5000 e
+  warm-up 500;
 - entidade `Request` com ciclo de vida e tempos derivados;
-- `Server` baseado em `simpy.Resource`, fila FIFO e histórico de estados;
+- `Server` baseado em `simpy.Resource`, fila FIFO, serviço exponencial
+  reproduzível, sampler injetável e histórico de estados;
 - `MetricsCollector`, `RunMetrics` e eventos imutáveis;
 - invariantes de topologia, capacidade, ciclo de vida e conservação;
 - logs estruturados em `INFO` e `DEBUG`;
 - políticas Aleatória, Round Robin e Fila Mais Curta;
 - `LoadBalancer` que atribui e encaminha requisições;
 - gerador Poisson reproduzível e processo de chegada integrado ao SimPy;
-- 119 testes automatizados aprovados em 8 de setembro de 2026;
+- 134 testes automatizados aprovados em 8 de setembro de 2026;
 - notebooks de integração e configuração.
 
 ### Desalinhamentos com o enunciado vigente
 
-- `SimulationConfig` ainda usa `server_capacity=15`, `service_time=0.05` e
-  `horizon=200` como padrões;
-- `Server` ainda usa duração de serviço constante;
-- não existe warm-up configurável;
-- as métricas ainda não calculam `E[N]` por integração temporal nem `U_i`;
+- as métricas ainda não aplicam o warm-up nem calculam `E[N]` por integração
+  temporal ou `U_i`;
 - Fila Mais Curta possui desempate determinístico pelo primeiro servidor, mas
   o novo enunciado exige desempate aleatório;
 - a integração completa existe apenas em notebook e depende de monkey patch de
@@ -331,7 +330,7 @@ ganho_% = 100*(E[R]_aleatoria - E[R]_politica)/E[R]_aleatoria
 
 ## 8. Próximos commits recomendados
 
-### Commit 1 - Serviço exponencial e configuração vigente
+### Commit 1 - Serviço exponencial e configuração vigente - concluído
 
 - substituir os padrões antigos por capacidade 1, `mu=1`, horizonte 5000 e
   warm-up 500;
@@ -465,10 +464,10 @@ Uma divisão compatível com o histórico atual é:
 
 Checklist obrigatório:
 
-- [ ] 3 servidores homogêneos com uma unidade de serviço cada.
-- [ ] Filas FCFS ilimitadas.
-- [ ] Chegadas Poisson reproduzíveis.
-- [ ] Serviço exponencial com `mu=1`.
+- [x] 3 servidores homogêneos com uma unidade de serviço cada.
+- [x] Filas FCFS ilimitadas.
+- [x] Chegadas Poisson reproduzíveis.
+- [x] Serviço exponencial com `mu=1`.
 - [ ] Três políticas configuráveis e desempate correto.
 - [ ] Horizonte 5000 e warm-up 500.
 - [ ] Cinco taxas estáveis, três políticas e dez réplicas: 150 execuções.

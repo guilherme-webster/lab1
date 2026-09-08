@@ -1,7 +1,9 @@
 """Servidor de processamento usado na simulacao."""
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from math import isfinite
+from random import Random
 from typing import Generator, Literal
 
 import simpy
@@ -15,6 +17,8 @@ ServerEvent = Literal[
     "service_started",
     "service_completed",
 ]
+
+ServiceTimeSampler = Callable[[Request], float]
 
 
 @dataclass(frozen=True, slots=True)
@@ -48,8 +52,8 @@ def _non_negative_integer(value: int, field_name: str) -> int:
     return value
 
 
-def _positive_time(value: float, field_name: str) -> float:
-    """Normaliza e valida uma duracao estritamente positiva."""
+def _positive_number(value: float, field_name: str) -> float:
+    """Normaliza e valida um numero finito estritamente positivo."""
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise TypeError(f"{field_name} deve ser um numero")
 
@@ -72,15 +76,24 @@ class Server:
         self,
         environment: simpy.Environment,
         server_id: int,
-        capacity: int = 15,
-        service_time: float = 0.05,
+        capacity: int = 1,
+        service_rate: float = 1.0,
+        seed: int | None = None,
+        service_time_sampler: ServiceTimeSampler | None = None,
     ) -> None:
         if not isinstance(environment, simpy.Environment):
             raise TypeError("environment deve ser um simpy.Environment")
+        if service_time_sampler is not None and not callable(service_time_sampler):
+            raise TypeError("service_time_sampler deve ser chamavel")
 
         self.environment = environment
         self.id = _non_negative_integer(server_id, "server_id")
-        self.service_time = _positive_time(service_time, "service_time")
+        self.service_rate = _positive_number(service_rate, "service_rate")
+        self.seed = (
+            None if seed is None else _non_negative_integer(seed, "seed")
+        )
+        self._rng = Random(self.seed)
+        self._service_time_sampler = service_time_sampler
         self._resource = simpy.Resource(
             environment,
             capacity=_positive_integer(capacity, "capacity"),
@@ -152,6 +165,17 @@ class Server:
             )
         )
 
+    def _next_service_duration(self, request: Request) -> float:
+        """Produz uma duracao exponencial ou usa o sampler injetado."""
+        if self._service_time_sampler is not None:
+            duration = self._service_time_sampler(request)
+        else:
+            duration = self._rng.expovariate(self.service_rate)
+            while duration <= 0:
+                duration = self._rng.expovariate(self.service_rate)
+
+        return _positive_number(duration, "service_duration")
+
     def handle(self, request: Request) -> Generator[simpy.Event, None, None]:
         """Atende uma requisicao previamente atribuida a este servidor."""
         if not isinstance(request, Request):
@@ -164,7 +188,8 @@ class Server:
             yield slot
             request.mark_service_started(self.environment.now)
             self._record_state("service_started", request.id)
-            yield self.environment.timeout(self.service_time)
+            service_duration = self._next_service_duration(request)
+            yield self.environment.timeout(service_duration)
             request.mark_completed(self.environment.now)
 
         self._completed_count += 1

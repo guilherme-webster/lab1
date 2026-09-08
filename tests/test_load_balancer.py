@@ -15,7 +15,11 @@ from load_balancer_sim.server import Server
 def _make_servers(environment: simpy.Environment, count: int = 3) -> list[Server]:
 	"""Cria servidores padrao para os cenarios de teste."""
 	return [
-		Server(environment, server_id=index, capacity=1, service_time=0.05)
+		Server(
+			environment,
+			server_id=index,
+			service_time_sampler=lambda _: 0.05,
+		)
 		for index in range(count)
 	]
 

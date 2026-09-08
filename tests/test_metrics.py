@@ -44,7 +44,12 @@ def test_collector_records_basic_request_events_in_order() -> None:
 def test_collector_uses_simulated_time_and_server_snapshot() -> None:
     environment = simpy.Environment()
     collector = MetricsCollector(environment)
-    server = Server(environment, server_id=0, capacity=1)
+    server = Server(
+        environment,
+        server_id=0,
+        capacity=1,
+        service_time_sampler=lambda _: 1.0,
+    )
     first = Request(id=0, burst_id=0, arrival_time=0.0)
     second = Request(id=1, burst_id=0, arrival_time=0.0)
 

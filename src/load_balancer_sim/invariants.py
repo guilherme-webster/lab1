@@ -66,9 +66,9 @@ def _validate_servers(
             raise SimulationInvariantError(
                 f"capacidade do servidor {server.id} diferente da configuracao"
             )
-        if server.service_time != config.service_time:
+        if server.service_rate != config.service_rate:
             raise SimulationInvariantError(
-                f"tempo de servico do servidor {server.id} diferente da configuracao"
+                f"taxa de servico do servidor {server.id} diferente da configuracao"
             )
         if not 0 <= server.active_count <= server.capacity:
             raise SimulationInvariantError(

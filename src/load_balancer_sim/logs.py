@@ -27,13 +27,15 @@ class SimulationLogger:
 
         self.logger.info(
             "run_started,policy=%s,server_count=%d,server_capacity=%d,"
-            "service_time=%.6f,arrival_rate=%.6f,horizon=%.6f,seed=%d",
+            "service_rate=%.6f,arrival_rate=%.6f,horizon=%.6f,warmup=%.6f,"
+            "seed=%d",
             config.policy,
             config.server_count,
             config.server_capacity,
-            config.service_time,
+            config.service_rate,
             config.arrival_rate,
             config.horizon,
+            config.warmup,
             config.seed,
         )
         self.logger.debug(EVENT_LOG_HEADER)

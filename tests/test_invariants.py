@@ -24,7 +24,8 @@ def _simulation_parts(
             environment,
             server_id=server_id,
             capacity=selected_config.server_capacity,
-            service_time=selected_config.service_time,
+            service_rate=selected_config.service_rate,
+            seed=selected_config.seed + server_id,
         )
         for server_id in range(selected_config.server_count)
     ]
@@ -82,6 +83,19 @@ def test_invariants_require_configured_server_capacity() -> None:
     collector = MetricsCollector(environment)
 
     with pytest.raises(SimulationInvariantError, match="capacidade"):
+        validate_simulation_invariants(config, servers, collector)
+
+
+def test_invariants_require_configured_service_rate() -> None:
+    config = SimulationConfig(service_rate=2.0)
+    environment = simpy.Environment()
+    servers = [
+        Server(environment, server_id=server_id, service_rate=1.0)
+        for server_id in range(config.server_count)
+    ]
+    collector = MetricsCollector(environment)
+
+    with pytest.raises(SimulationInvariantError, match="taxa de servico"):
         validate_simulation_invariants(config, servers, collector)
 
 
@@ -161,7 +175,7 @@ def test_invariants_reject_inconsistent_burst_id() -> None:
 
 def test_invariants_ignore_completion_during_drainage() -> None:
     config, servers, collector = _simulation_parts(
-        SimulationConfig(horizon=1.0)
+        SimulationConfig(horizon=1.0, warmup=0.0)
     )
     request = Request(id=0, burst_id=0, arrival_time=0.0)
     _record_arrival_and_routing(collector, request, servers[0])

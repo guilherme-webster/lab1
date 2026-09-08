@@ -26,7 +26,9 @@ Já estão implementados:
 
 - `SimulationConfig` imutável e validada;
 - `Request` e seu ciclo de vida;
-- `Server` com `simpy.Resource`, fila FIFO e histórico de estados;
+- `Server` com uma unidade de processamento, fila FIFO, serviço exponencial
+  reproduzível e histórico de estados;
+- configuração vigente com `service_rate=1`, horizonte 5000 e warm-up 500;
 - `MetricsCollector`, `RunMetrics` e eventos imutáveis;
 - invariantes de topologia, capacidade, eventos e conservação;
 - logs estruturados de configuração, eventos e resumo;
@@ -36,22 +38,17 @@ Já estão implementados:
 - testes unitários e testes parciais de integração;
 - notebooks de configuração e integração.
 
-Em 8 de setembro de 2026, a suíte possui **119 testes aprovados**.
+Em 8 de setembro de 2026, a suíte possui **134 testes aprovados**.
 
 ## Alinhamentos ainda necessários
 
-O código ainda conserva alguns padrões do enunciado antigo:
-
-- capacidade padrão 15 em vez de 1;
-- serviço constante de 0,05 em vez de exponencial com média 1;
-- horizonte 200 em vez de 5000;
-- ausência de warm-up de 500 unidades;
-- Fila Mais Curta sem desempate aleatório.
+O código ainda precisa alinhar a Fila Mais Curta ao desempate aleatório exigido
+pelo enunciado.
 
 Também faltam:
 
 - integração pública dos eventos do servidor com o coletor, sem monkey patch;
-- cálculo temporal de `E[N]` e utilização por servidor;
+- aplicação do warm-up e cálculo temporal de `E[N]` e utilização por servidor;
 - executor completo de uma rodada;
 - executor das 150 rodadas estáveis;
 - modelo analítico `M/M/1`;
@@ -65,9 +62,9 @@ rajadas de 30 a 120 não fazem mais parte dos requisitos vigentes.
 
 | Componente | Responsabilidade |
 | --- | --- |
-| `SimulationConfig` | Configura e valida uma rodada. Seus padrões ainda serão atualizados. |
+| `SimulationConfig` | Configura capacidade 1, `mu=1`, horizonte 5000 e warm-up 500. |
 | `Request` | Mantém IDs, chegada, atribuição, início, conclusão e tempos derivados. |
-| `Server` | Processa requisições, mantém fila FIFO e registra estados. |
+| `Server` | Sorteia serviços exponenciais, mantém fila FIFO e registra estados. |
 | `ServerState` | Fotografia imutável do estado de um servidor. |
 | `LoadBalancer` | Seleciona um servidor pela política e inicia o atendimento. |
 | `RandomPolicy` | Escolhe um servidor pseudoaleatoriamente. |
@@ -110,6 +107,28 @@ pytest
 Os testes usam somente o relógio simulado do SimPy e não dependem de espera em
 tempo real.
 
+## Tempo de serviço
+
+Por padrão, cada servidor sorteia uma duração exponencial de média
+`1/service_rate`. A semente torna a sequência reproduzível:
+
+```python
+server = Server(environment, server_id=0, service_rate=1.0, seed=123)
+```
+
+Testes e futuros traços de carga podem fornecer um sampler próprio:
+
+```python
+server = Server(
+    environment,
+    server_id=0,
+    service_time_sampler=lambda request: 0.05,
+)
+```
+
+Essa injeção permite usar durações conhecidas nos testes e, futuramente,
+reutilizar a mesma demanda de serviço nas três políticas.
+
 ## Estrutura atual
 
 ```text
@@ -141,16 +160,5 @@ simulação deve residir nos módulos do pacote, sem acessar atributos privados.
 
 ## Próximo commit técnico
 
-O próximo marco recomendado é atualizar a configuração e o servidor para o
-serviço exponencial:
-
-```text
-server_capacity = 1
-service_rate = 1.0
-service_duration ~ Exponencial(service_rate)
-horizon = 5000
-warmup = 500
-```
-
-Os testes do servidor devem poder injetar durações determinísticas, enquanto a
-simulação real usa amostras exponenciais reproduzíveis.
+O próximo marco é integrar publicamente os eventos de início e conclusão do
+servidor ao `MetricsCollector`, eliminando o monkey patch usado no notebook.

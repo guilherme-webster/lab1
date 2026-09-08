@@ -13,10 +13,11 @@ def test_config_uses_project_defaults() -> None:
 
     assert config.policy == "round_robin"
     assert config.server_count == 3
-    assert config.server_capacity == 15
-    assert config.service_time == 0.05
-    assert config.arrival_rate == 1.0
-    assert config.horizon == 200.0
+    assert config.server_capacity == 1
+    assert config.service_rate == 1.0
+    assert config.arrival_rate == 1.8
+    assert config.horizon == 5000.0
+    assert config.warmup == 500.0
     assert config.seed == 12345
 
 
@@ -28,11 +29,17 @@ def test_config_accepts_every_supported_policy(policy: str) -> None:
 
 
 def test_config_normalizes_numeric_durations() -> None:
-    config = SimulationConfig(service_time=1, arrival_rate=2, horizon=10)
+    config = SimulationConfig(
+        service_rate=2,
+        arrival_rate=2,
+        horizon=10,
+        warmup=1,
+    )
 
-    assert config.service_time == 1.0
+    assert config.service_rate == 2.0
     assert config.arrival_rate == 2.0
     assert config.horizon == 10.0
+    assert config.warmup == 1.0
 
 
 def test_config_is_immutable() -> None:
@@ -51,14 +58,17 @@ def test_config_is_immutable() -> None:
         ("server_count", 3.0, TypeError),
         ("server_capacity", -1, ValueError),
         ("server_capacity", True, TypeError),
-        ("service_time", 0, ValueError),
-        ("service_time", math.inf, ValueError),
-        ("service_time", "0.05", TypeError),
+        ("service_rate", 0, ValueError),
+        ("service_rate", math.inf, ValueError),
+        ("service_rate", "1.0", TypeError),
         ("arrival_rate", 0, ValueError),
         ("arrival_rate", math.inf, ValueError),
         ("arrival_rate", "1.0", TypeError),
         ("horizon", 0, ValueError),
         ("horizon", math.inf, ValueError),
+        ("warmup", -1, ValueError),
+        ("warmup", math.inf, ValueError),
+        ("warmup", "500", TypeError),
         ("seed", -1, ValueError),
         ("seed", 1.5, TypeError),
     ],
@@ -72,3 +82,8 @@ def test_config_rejects_invalid_values(
 
     with pytest.raises(expected_exception, match=field_name):
         SimulationConfig(**config_data)  # type: ignore[arg-type]
+
+
+def test_config_requires_warmup_before_horizon() -> None:
+    with pytest.raises(ValueError, match="warmup"):
+        SimulationConfig(horizon=500.0, warmup=500.0)

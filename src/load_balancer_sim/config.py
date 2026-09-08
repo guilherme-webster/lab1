@@ -49,16 +49,30 @@ def _positive_number(value: float, field_name: str) -> float:
     return normalized_value
 
 
+def _non_negative_number(value: float, field_name: str) -> float:
+    """Normaliza e valida um numero finito e nao negativo."""
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise TypeError(f"{field_name} deve ser um numero")
+
+    normalized_value = float(value)
+    if not isfinite(normalized_value):
+        raise ValueError(f"{field_name} deve ser finito")
+    if normalized_value < 0:
+        raise ValueError(f"{field_name} nao pode ser negativo")
+    return normalized_value
+
+
 @dataclass(frozen=True, slots=True)
 class SimulationConfig:
     """Parametros imutaveis usados para executar uma rodada."""
 
     policy: PolicyName = "round_robin"
     server_count: int = 3
-    server_capacity: int = 15
-    service_time: float = 0.05
-    arrival_rate: float = 1.0
-    horizon: float = 200.0
+    server_capacity: int = 1
+    service_rate: float = 1.0
+    arrival_rate: float = 1.8
+    horizon: float = 5000.0
+    warmup: float = 500.0
     seed: int = 12345
 
     def __post_init__(self) -> None:
@@ -71,8 +85,8 @@ class SimulationConfig:
         _positive_integer(self.server_capacity, "server_capacity")
         object.__setattr__(
             self,
-            "service_time",
-            _positive_number(self.service_time, "service_time"),
+            "service_rate",
+            _positive_number(self.service_rate, "service_rate"),
         )
         object.__setattr__(
             self,
@@ -85,4 +99,11 @@ class SimulationConfig:
             "horizon",
             _positive_number(self.horizon, "horizon"),
         )
+        object.__setattr__(
+            self,
+            "warmup",
+            _non_negative_number(self.warmup, "warmup"),
+        )
+        if self.warmup >= self.horizon:
+            raise ValueError("warmup deve ser menor que horizon")
         _non_negative_integer(self.seed, "seed")
