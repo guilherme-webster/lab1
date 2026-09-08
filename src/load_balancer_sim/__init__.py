@@ -7,7 +7,12 @@ from load_balancer_sim.invariants import (
 )
 from load_balancer_sim.logs import EVENT_LOG_HEADER, SimulationLogger
 from load_balancer_sim.load_balancer import LoadBalancer
-from load_balancer_sim.metrics import MetricEvent, MetricsCollector, RunMetrics
+from load_balancer_sim.metrics import (
+    MetricEvent,
+    MetricsCollector,
+    RunMetrics,
+    ServerUtilization,
+)
 from load_balancer_sim.policies import (
     RandomPolicy,
     RoundRobinPolicy,
@@ -43,6 +48,7 @@ __all__ = [
     "Server",
     "ServerEventCallback",
     "ServerState",
+    "ServerUtilization",
     "ServiceTimeSampler",
     "SimulationConfig",
     "SimulationInvariantError",

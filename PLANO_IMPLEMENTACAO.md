@@ -120,20 +120,19 @@ Consequentemente, Pareto, Hurst, rajadas, capacidade 15, serviço constante de
 - entidade `Request` com ciclo de vida e tempos derivados;
 - `Server` baseado em `simpy.Resource`, fila FIFO, serviço exponencial
   reproduzível, sampler injetável, histórico de estados e callbacks públicos;
-- `MetricsCollector`, `RunMetrics` e eventos imutáveis;
+- `MetricsCollector` com warm-up, `E[N]` temporal e utilização individual;
+- `RunMetrics`, `ServerUtilization` e eventos imutáveis;
 - invariantes de topologia, capacidade, ciclo de vida e conservação;
 - logs estruturados em `INFO` e `DEBUG`;
 - políticas Aleatória, Round Robin e Fila Mais Curta em módulo próprio, com
   sementes reproduzíveis e desempate correto;
 - `LoadBalancer` que valida, atribui e encaminha requisições;
 - gerador Poisson reproduzível e processo de chegada integrado ao SimPy;
-- 168 testes automatizados aprovados em 8 de setembro de 2026;
+- 179 testes automatizados aprovados em 8 de setembro de 2026;
 - notebooks de integração e configuração.
 
 ### Desalinhamentos com o enunciado vigente
 
-- as métricas ainda não aplicam o warm-up nem calculam `E[N]` por integração
-  temporal ou `U_i`;
 - não existem `simulation.py`, executor das 150 rodadas, modelo analítico,
   exportação CSV, gráficos ou CLI;
 
@@ -355,7 +354,7 @@ service_completed` é coletado automaticamente em um teste de integração.
 - tornar aleatório o desempate de Fila Mais Curta;
 - testar todos os empates e a reprodutibilidade.
 
-### Commit 4 - Métricas temporais
+### Commit 4 - Métricas temporais - concluído
 
 - adicionar `E[N]` por integração da ocupação;
 - adicionar `U_1`, `U_2` e `U_3` por integração do tempo ocupado;
@@ -464,10 +463,10 @@ Checklist obrigatório:
 - [x] Chegadas Poisson reproduzíveis.
 - [x] Serviço exponencial com `mu=1`.
 - [x] Três políticas configuráveis e desempate correto.
-- [ ] Horizonte 5000 e warm-up 500.
+- [x] Horizonte 5000 e warm-up 500.
 - [ ] Cinco taxas estáveis, três políticas e dez réplicas: 150 execuções.
 - [ ] Média e IC de 95%.
-- [ ] `X`, `E[R]`, `E[N]` temporal e `U_i`.
+- [x] `X`, `E[R]`, `E[N]` temporal e `U_i`.
 - [ ] Modelo analítico apenas da Aleatória, com três `M/M/1`.
 - [ ] Comparação de `E[R]` e ganhos percentuais.
 - [ ] Lei de Little conferida nas três políticas.

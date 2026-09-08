@@ -11,6 +11,7 @@ from load_balancer_sim import (
     MetricsCollector,
     Request,
     RunMetrics,
+    ServerUtilization,
     SimulationConfig,
     SimulationLogger,
 )
@@ -85,20 +86,29 @@ def test_run_completion_logs_summary_at_info(
     caplog.set_level(logging.INFO, logger=logger.name)
     metrics = RunMetrics(
         horizon=200.0,
+        warmup=20.0,
+        measurement_duration=180.0,
         arrival_count=12,
         completed_count=10,
         pending_count=2,
         throughput=0.05,
         average_queue_time=None,
         average_response_time=0.075,
+        average_number_in_system=1.25,
+        server_utilizations=(
+            ServerUtilization(0, 0.5),
+            ServerUtilization(1, 0.25),
+        ),
     )
 
     SimulationLogger(logger).log_run_completed(metrics)
 
     assert _captured_messages(caplog) == [
-        "run_completed,horizon=200.000000,arrivals=12,completed=10,pending=2,"
+        "run_completed,horizon=200.000000,warmup=20.000000,"
+        "measurement_duration=180.000000,arrivals=12,completed=10,pending=2,"
         "throughput=0.050000,average_queue_time=none,"
-        "average_response_time=0.075000"
+        "average_response_time=0.075000,average_number_in_system=1.250000,"
+        "server_utilizations=0:0.500000|1:0.250000"
     ]
     assert caplog.records[0].levelno == logging.INFO
 

@@ -3,7 +3,7 @@
 import logging
 
 from load_balancer_sim.config import SimulationConfig
-from load_balancer_sim.metrics import MetricEvent, RunMetrics
+from load_balancer_sim.metrics import MetricEvent, RunMetrics, ServerUtilization
 
 
 LOGGER_NAME = "load_balancer_sim"
@@ -62,15 +62,21 @@ class SimulationLogger:
             raise TypeError("metrics deve ser uma RunMetrics")
 
         self.logger.info(
-            "run_completed,horizon=%.6f,arrivals=%d,completed=%d,pending=%d,"
-            "throughput=%.6f,average_queue_time=%s,average_response_time=%s",
+            "run_completed,horizon=%.6f,warmup=%.6f,measurement_duration=%.6f,"
+            "arrivals=%d,completed=%d,pending=%d,throughput=%.6f,"
+            "average_queue_time=%s,average_response_time=%s,"
+            "average_number_in_system=%.6f,server_utilizations=%s",
             metrics.horizon,
+            metrics.warmup,
+            metrics.measurement_duration,
             metrics.arrival_count,
             metrics.completed_count,
             metrics.pending_count,
             metrics.throughput,
             _optional_float(metrics.average_queue_time),
             _optional_float(metrics.average_response_time),
+            metrics.average_number_in_system,
+            _format_utilizations(metrics.server_utilizations),
         )
 
 
@@ -82,3 +88,10 @@ def _optional_value(value: int | None) -> str:
 def _optional_float(value: float | None) -> str:
     """Converte uma media opcional para o resumo da rodada."""
     return "none" if value is None else f"{value:.6f}"
+
+
+def _format_utilizations(values: tuple[ServerUtilization, ...]) -> str:
+    """Formata utilizacoes identificadas sem perder a ordem dos servidores."""
+    return "|".join(
+        f"{value.server_id}:{value.utilization:.6f}" for value in values
+    )

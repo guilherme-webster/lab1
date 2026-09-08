@@ -29,7 +29,9 @@ Já estão implementados:
 - `Server` com uma unidade de processamento, fila FIFO, serviço exponencial
   reproduzível, histórico de estados e callbacks públicos de serviço;
 - configuração vigente com `service_rate=1`, horizonte 5000 e warm-up 500;
-- `MetricsCollector`, `RunMetrics` e eventos imutáveis;
+- `MetricsCollector` com recorte de warm-up, integração temporal de `E[N]` e
+  utilização individual dos servidores;
+- `RunMetrics`, `ServerUtilization` e eventos imutáveis;
 - invariantes de topologia, capacidade, eventos e conservação;
 - logs estruturados de configuração, eventos e resumo;
 - `LoadBalancer`;
@@ -39,13 +41,12 @@ Já estão implementados:
 - testes unitários e teste de integração do ciclo completo de uma requisição;
 - notebooks de configuração e integração.
 
-Em 8 de setembro de 2026, a suíte possui **168 testes aprovados**.
+Em 8 de setembro de 2026, a suíte possui **179 testes aprovados**.
 
 ## Alinhamentos ainda necessários
 
 Ainda faltam:
 
-- aplicação do warm-up e cálculo temporal de `E[N]` e utilização por servidor;
 - executor completo de uma rodada;
 - executor das 150 rodadas estáveis;
 - modelo analítico `M/M/1`;
@@ -68,8 +69,9 @@ rajadas de 30 a 120 não fazem mais parte dos requisitos vigentes.
 | `RoundRobinPolicy` | Distribui requisições ciclicamente. |
 | `ShortestQueuePolicy` | Escolhe a menor ocupação e desempata pseudoaleatoriamente. |
 | `PoissonTrafficGenerator` | Produz chegadas Poisson no ambiente SimPy. |
-| `MetricsCollector` | Preserva eventos e calcula as métricas atualmente disponíveis. |
-| `RunMetrics` | Resumo imutável de uma rodada. |
+| `MetricsCollector` | Preserva eventos e calcula métricas na janela `[warmup, horizon)`. |
+| `RunMetrics` | Resume vazão, tempos, `E[N]` e utilizações de uma rodada. |
+| `ServerUtilization` | Associa a utilização temporal ao identificador do servidor. |
 | `SimulationLogger` | Emite configuração, eventos e resumo. |
 | `validate_simulation_invariants` | Valida topologia, ciclos de vida e conservação. |
 
@@ -126,6 +128,23 @@ server = Server(
 Essa injeção permite usar durações conhecidas nos testes e, futuramente,
 reutilizar a mesma demanda de serviço nas três políticas.
 
+## Métricas temporais
+
+O cálculo recebe explicitamente a janela e todos os servidores, inclusive os
+que permaneceram ociosos:
+
+```python
+metrics = collector.calculate_run_metrics(
+    horizon=config.horizon,
+    warmup=config.warmup,
+    servers=servers,
+)
+```
+
+Eventos anteriores ao warm-up atualizam o estado inicial da integração, mas
+não acumulam área. Eventos exatamente no warm-up são incluídos; eventos no
+horizonte são excluídos.
+
 ## Estrutura atual
 
 ```text
@@ -159,6 +178,5 @@ simulação deve residir nos módulos do pacote, sem acessar atributos privados.
 
 ## Próximo commit técnico
 
-O próximo marco é implementar as métricas temporais: número médio de
-requisições no sistema, utilização individual dos servidores e recorte correto
-da janela de medição após o warm-up.
+O próximo marco é criar `simulation.py`, responsável por montar e executar uma
+rodada completa e retornar métricas, eventos e metadados de semente.
