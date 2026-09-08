@@ -27,7 +27,7 @@ Já estão implementados:
 - `SimulationConfig` imutável e validada;
 - `Request` e seu ciclo de vida;
 - `Server` com uma unidade de processamento, fila FIFO, serviço exponencial
-  reproduzível e histórico de estados;
+  reproduzível, histórico de estados e callbacks públicos de serviço;
 - configuração vigente com `service_rate=1`, horizonte 5000 e warm-up 500;
 - `MetricsCollector`, `RunMetrics` e eventos imutáveis;
 - invariantes de topologia, capacidade, eventos e conservação;
@@ -35,10 +35,10 @@ Já estão implementados:
 - `LoadBalancer`;
 - políticas Aleatória, Round Robin e Fila Mais Curta;
 - gerador de chegadas Poisson reproduzível;
-- testes unitários e testes parciais de integração;
+- testes unitários e teste de integração do ciclo completo de uma requisição;
 - notebooks de configuração e integração.
 
-Em 8 de setembro de 2026, a suíte possui **134 testes aprovados**.
+Em 8 de setembro de 2026, a suíte possui **138 testes aprovados**.
 
 ## Alinhamentos ainda necessários
 
@@ -47,7 +47,6 @@ pelo enunciado.
 
 Também faltam:
 
-- integração pública dos eventos do servidor com o coletor, sem monkey patch;
 - aplicação do warm-up e cálculo temporal de `E[N]` e utilização por servidor;
 - executor completo de uma rodada;
 - executor das 150 rodadas estáveis;
@@ -64,7 +63,7 @@ rajadas de 30 a 120 não fazem mais parte dos requisitos vigentes.
 | --- | --- |
 | `SimulationConfig` | Configura capacidade 1, `mu=1`, horizonte 5000 e warm-up 500. |
 | `Request` | Mantém IDs, chegada, atribuição, início, conclusão e tempos derivados. |
-| `Server` | Sorteia serviços exponenciais, mantém fila FIFO e registra estados. |
+| `Server` | Sorteia serviços exponenciais, mantém fila FIFO e publica callbacks de início e conclusão. |
 | `ServerState` | Fotografia imutável do estado de um servidor. |
 | `LoadBalancer` | Seleciona um servidor pela política e inicia o atendimento. |
 | `RandomPolicy` | Escolhe um servidor pseudoaleatoriamente. |
@@ -160,5 +159,6 @@ simulação deve residir nos módulos do pacote, sem acessar atributos privados.
 
 ## Próximo commit técnico
 
-O próximo marco é integrar publicamente os eventos de início e conclusão do
-servidor ao `MetricsCollector`, eliminando o monkey patch usado no notebook.
+O próximo marco é alinhar as políticas e o balanceador: separar as políticas em
+um módulo próprio, reforçar validações, remover `**kwargs` e tornar aleatório o
+desempate da política de Fila Mais Curta.

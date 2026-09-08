@@ -19,6 +19,7 @@ ServerEvent = Literal[
 ]
 
 ServiceTimeSampler = Callable[[Request], float]
+ServerEventCallback = Callable[[Request, "Server"], None]
 
 
 @dataclass(frozen=True, slots=True)
@@ -80,11 +81,17 @@ class Server:
         service_rate: float = 1.0,
         seed: int | None = None,
         service_time_sampler: ServiceTimeSampler | None = None,
+        on_service_started: ServerEventCallback | None = None,
+        on_service_completed: ServerEventCallback | None = None,
     ) -> None:
         if not isinstance(environment, simpy.Environment):
             raise TypeError("environment deve ser um simpy.Environment")
         if service_time_sampler is not None and not callable(service_time_sampler):
             raise TypeError("service_time_sampler deve ser chamavel")
+        if on_service_started is not None and not callable(on_service_started):
+            raise TypeError("on_service_started deve ser chamavel")
+        if on_service_completed is not None and not callable(on_service_completed):
+            raise TypeError("on_service_completed deve ser chamavel")
 
         self.environment = environment
         self.id = _non_negative_integer(server_id, "server_id")
@@ -94,6 +101,8 @@ class Server:
         )
         self._rng = Random(self.seed)
         self._service_time_sampler = service_time_sampler
+        self._on_service_started = on_service_started
+        self._on_service_completed = on_service_completed
         self._resource = simpy.Resource(
             environment,
             capacity=_positive_integer(capacity, "capacity"),
@@ -188,9 +197,13 @@ class Server:
             yield slot
             request.mark_service_started(self.environment.now)
             self._record_state("service_started", request.id)
+            if self._on_service_started is not None:
+                self._on_service_started(request, self)
             service_duration = self._next_service_duration(request)
             yield self.environment.timeout(service_duration)
             request.mark_completed(self.environment.now)
 
         self._completed_count += 1
         self._record_state("service_completed", request.id)
+        if self._on_service_completed is not None:
+            self._on_service_completed(request, self)

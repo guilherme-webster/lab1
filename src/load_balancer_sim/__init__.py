@@ -8,7 +8,12 @@ from load_balancer_sim.invariants import (
 from load_balancer_sim.logs import EVENT_LOG_HEADER, SimulationLogger
 from load_balancer_sim.metrics import MetricEvent, MetricsCollector, RunMetrics
 from load_balancer_sim.request import Request
-from load_balancer_sim.server import Server, ServerState, ServiceTimeSampler
+from load_balancer_sim.server import (
+    Server,
+    ServerEventCallback,
+    ServerState,
+    ServiceTimeSampler,
+)
 from load_balancer_sim.traffic import (
     PoissonTrafficGenerator,
     generate_poisson_arrival_times,
@@ -24,6 +29,7 @@ __all__ = [
     "Request",
     "RunMetrics",
     "Server",
+    "ServerEventCallback",
     "ServerState",
     "ServiceTimeSampler",
     "SimulationConfig",

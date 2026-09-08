@@ -13,6 +13,7 @@ from load_balancer_sim import (
     RunMetrics,
     Server,
 )
+from load_balancer_sim.load_balancer import LoadBalancer
 
 
 def test_collector_starts_with_no_events() -> None:
@@ -39,6 +40,37 @@ def test_collector_records_basic_request_events_in_order() -> None:
         MetricEvent(0.0, "service_started", 7, 3, 2, 0, 0),
         MetricEvent(0.0, "service_completed", 7, 3, 2, 0, 0),
     )
+
+
+def test_server_callbacks_collect_complete_request_lifecycle() -> None:
+    environment = simpy.Environment()
+    collector = MetricsCollector(environment)
+    server = Server(
+        environment,
+        server_id=2,
+        service_time_sampler=lambda _: 0.05,
+        on_service_started=collector.record_service_started,
+        on_service_completed=collector.record_service_completed,
+    )
+    load_balancer = LoadBalancer(environment, [server])
+    request = Request(id=7, burst_id=3, arrival_time=environment.now)
+
+    collector.record_arrival(request)
+    selected_server = load_balancer.route_request(request)
+    collector.record_routing(request, selected_server)
+    environment.run()
+
+    assert [event.event for event in collector.events] == [
+        "arrival",
+        "routing",
+        "service_started",
+        "service_completed",
+    ]
+    assert [event.time for event in collector.events] == pytest.approx(
+        [0.0, 0.0, 0.0, 0.05]
+    )
+    assert collector.events[2].active_count == 1
+    assert collector.events[3].active_count == 0
 
 
 def test_collector_uses_simulated_time_and_server_snapshot() -> None:

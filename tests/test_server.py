@@ -75,6 +75,52 @@ def test_server_accepts_deterministic_service_sampler() -> None:
     assert request.completion_time == pytest.approx(0.05)
 
 
+def test_server_notifies_service_callbacks_in_order() -> None:
+    environment = simpy.Environment()
+    observed_events: list[tuple[str, int, int, float, int, int]] = []
+
+    def record_started(request: Request, server: Server) -> None:
+        observed_events.append(
+            (
+                "service_started",
+                request.id,
+                server.id,
+                float(server.environment.now),
+                server.active_count,
+                server.completed_count,
+            )
+        )
+
+    def record_completed(request: Request, server: Server) -> None:
+        observed_events.append(
+            (
+                "service_completed",
+                request.id,
+                server.id,
+                float(server.environment.now),
+                server.active_count,
+                server.completed_count,
+            )
+        )
+
+    server = Server(
+        environment,
+        server_id=2,
+        service_time_sampler=_constant_duration(0.05),
+        on_service_started=record_started,
+        on_service_completed=record_completed,
+    )
+    request = Request(id=7, burst_id=0, arrival_time=0.0)
+
+    _submit(server, request)
+    environment.run()
+
+    assert observed_events == [
+        ("service_started", 7, 2, 0.0, 1, 0),
+        ("service_completed", 7, 2, 0.05, 0, 1),
+    ]
+
+
 def test_server_limits_concurrency_to_one_and_queues_excess_requests() -> None:
     environment = simpy.Environment()
     server = Server(
@@ -202,6 +248,8 @@ def test_exponential_service_mean_matches_inverse_rate() -> None:
         ("seed", -1, ValueError),
         ("seed", 1.5, TypeError),
         ("service_time_sampler", object(), TypeError),
+        ("on_service_started", object(), TypeError),
+        ("on_service_completed", object(), TypeError),
     ],
 )
 def test_server_rejects_invalid_configuration(
@@ -216,6 +264,8 @@ def test_server_rejects_invalid_configuration(
         "service_rate": 1.0,
         "seed": 1,
         "service_time_sampler": _constant_duration(1.0),
+        "on_service_started": None,
+        "on_service_completed": None,
     }
     server_data[field_name] = invalid_value
 

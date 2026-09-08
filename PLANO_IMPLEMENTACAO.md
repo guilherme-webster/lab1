@@ -342,7 +342,7 @@ ganho_% = 100*(E[R]_aleatoria - E[R]_politica)/E[R]_aleatoria
 **Pronto quando:** amostras são positivas, a média empírica se aproxima de 1,
 a mesma semente reproduz os valores e os testes de FCFS continuam passando.
 
-### Commit 2 - Observabilidade pública do servidor
+### Commit 2 - Observabilidade pública do servidor - concluído
 
 - adicionar callbacks públicos de início e conclusão do serviço;
 - ligar esses callbacks ao `MetricsCollector`;
