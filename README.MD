@@ -1,131 +1,83 @@
 # Balanceador de carga - MC714
 
-Implementação do primeiro trabalho da disciplina MC714 - Sistemas Distribuídos
-da UNICAMP. O projeto usa Python e SimPy para construir, em pequenos módulos
-funcionais, uma simulação de balanceamento de carga entre três servidores.
+Simulador de um balanceador de carga para três servidores, desenvolvido em
+Python e SimPy para o Trabalho 1 de MC714 - Sistemas Distribuídos da UNICAMP.
+
+O enunciado vigente é `MC714_enunciado.pdf`. Em pontos de divergência, ele
+substitui a versão antiga `MC714_2s2026.pdf`. O roteiro atualizado está em
+[PLANO_IMPLEMENTACAO.md](PLANO_IMPLEMENTACAO.md).
+
+## Objetivo vigente
+
+O sistema final terá:
+
+- chegadas Poisson;
+- 3 servidores homogêneos com uma unidade de processamento cada;
+- filas FCFS ilimitadas;
+- tempos de serviço exponenciais com `mu=1` e média 1;
+- políticas Aleatória, Round Robin e Fila Mais Curta;
+- execuções de 5000 unidades, descartando as primeiras 500 como warm-up;
+- métricas de vazão, resposta, número médio no sistema e utilização;
+- comparação com o modelo analítico `M/M/1` da política Aleatória.
 
 ## Estado atual
 
-Neste marco, a base do domínio e o processamento de um servidor já estão
-implementados:
+Já estão implementados:
 
-- ambiente de eventos discretos com SimPy;
-- configuração imutável de uma rodada, com valores padrão e validação de
-  políticas, servidores, rajadas, tempos, Hurst e semente;
-- entidade `Request`, com identificadores, instante de chegada e transições
-  validadas de atribuição, início de serviço e conclusão;
-- cálculo do tempo em fila e do tempo de resposta de uma requisição;
-- servidor com capacidade e tempo de serviço configuráveis, usando
-  `simpy.Resource` e fila FIFO;
-- valores padrão do servidor compatíveis com o trabalho: 15 requisições
-  simultâneas e serviço constante de 0,05 unidade de tempo;
-- monitoramento local de requisições ativas, fila, conclusões e máximos
-  observados;
-- histórico imutável do estado do servidor nos eventos de recebimento, início
-  e conclusão do serviço;
-- coletor central com eventos imutáveis de chegada, roteamento, início e
-  conclusão do serviço, incluindo o estado básico do servidor quando
-  disponível;
-- resumo imutável de uma rodada com chegadas, conclusões, pendências,
-  throughput, tempo médio em fila e tempo médio de resposta;
-- validação das invariantes de topologia, capacidade, ciclo de vida das
-  requisições, janela de medição e conservação do sistema;
-- logs estruturados em `INFO` para configuração e resumo da rodada e em
-  `DEBUG` para cada evento registrado pelo coletor;
-- testes unitários das validações, do ciclo de vida da requisição, do limite de
-  capacidade, da ordem FIFO e do monitoramento.
+- `SimulationConfig` imutável e validada;
+- `Request` e seu ciclo de vida;
+- `Server` com `simpy.Resource`, fila FIFO e histórico de estados;
+- `MetricsCollector`, `RunMetrics` e eventos imutáveis;
+- invariantes de topologia, capacidade, eventos e conservação;
+- logs estruturados de configuração, eventos e resumo;
+- `LoadBalancer`;
+- políticas Aleatória, Round Robin e Fila Mais Curta;
+- gerador de chegadas Poisson reproduzível;
+- testes unitários e testes parciais de integração;
+- notebooks de configuração e integração.
 
-O caso de 16 requisições simultâneas está coberto pelos testes: 15 iniciam em
-`t = 0` e a última inicia em `t = 0,05`.
+Em 8 de setembro de 2026, a suíte possui **119 testes aprovados**.
 
-Ainda não há uma simulação completa com três servidores. Criação da rodada a
-partir da configuração, balanceador, políticas, tráfego Pareto, integração do
-coletor, experimentos, modelo analítico, CSVs e gráficos serão adicionados em
-etapas posteriores, conforme o
-[plano de implementação](PLANO_IMPLEMENTACAO.md).
+## Alinhamentos ainda necessários
 
-## Componentes implementados
+O código ainda conserva alguns padrões do enunciado antigo:
+
+- capacidade padrão 15 em vez de 1;
+- serviço constante de 0,05 em vez de exponencial com média 1;
+- horizonte 200 em vez de 5000;
+- ausência de warm-up de 500 unidades;
+- Fila Mais Curta sem desempate aleatório.
+
+Também faltam:
+
+- integração pública dos eventos do servidor com o coletor, sem monkey patch;
+- cálculo temporal de `E[N]` e utilização por servidor;
+- executor completo de uma rodada;
+- executor das 150 rodadas estáveis;
+- modelo analítico `M/M/1`;
+- experimento instável com `lambda=3,3`;
+- intervalos de confiança, CSVs, gráficos e CLI.
+
+O gerador Poisson já está alinhado ao novo enunciado. Pareto Limitada, Hurst e
+rajadas de 30 a 120 não fazem mais parte dos requisitos vigentes.
+
+## Componentes
 
 | Componente | Responsabilidade |
 | --- | --- |
-| `SimulationConfig` | Mantém e valida os parâmetros imutáveis de uma rodada. |
-| `MetricEvent` | Representa um evento observado pelo coletor. |
-| `MetricsCollector` | Preserva eventos e calcula as métricas de uma rodada. |
-| `RunMetrics` | Representa o resumo imutável de uma rodada. |
-| `validate_simulation_invariants` | Valida configuração, servidores e eventos. |
-| `SimulationLogger` | Emite configuração, eventos e resumo nos níveis adequados. |
-| `Request` | Mantém o ciclo de vida e os tempos de uma requisição. |
-| `Server` | Processa requisições concorrentemente e enfileira o excesso. |
-| `ServerState` | Representa uma fotografia imutável do estado do servidor. |
-
-O `Server` exige que a requisição já esteja atribuída ao seu identificador.
-Essa atribuição será responsabilidade do balanceador quando ele for
-implementado.
-
-## Métricas da rodada
-
-`MetricsCollector.calculate_run_metrics(horizon)` calcula as métricas usando
-somente os eventos da janela informada. Chegadas devem ocorrer antes do
-horizonte; conclusões exatamente no horizonte são contabilizadas.
-
-```text
-throughput = requisições concluídas / horizonte
-tempo em fila = início do serviço - chegada
-tempo de resposta = conclusão - chegada
-```
-
-As médias são `None` quando ainda não existe nenhuma observação aplicável.
-
-## Invariantes da simulação
-
-Ao final de uma rodada,
-`validate_simulation_invariants(config, servers, collector)` verifica:
-
-- quantidade, identificadores, capacidade e tempo de serviço dos servidores;
-- uso do mesmo ambiente SimPy pelos servidores e pelo coletor;
-- limites de requisições ativas e tamanho não negativo das filas;
-- sequência `arrival`, `routing`, `service_started`, `service_completed`;
-- permanência da requisição no mesmo servidor durante o atendimento;
-- ausência de chegadas no horizonte ou depois dele;
-- conservação `chegadas = concluídas + ativas + aguardando`.
-
-Uma violação lança `SimulationInvariantError`. Eventos de conclusão posteriores
-ao horizonte, gerados por uma eventual fase de drenagem, não alteram a
-validação da janela oficial.
-
-## Logs estruturados
-
-O nível `INFO` registra a configuração no início e as métricas no fim de uma
-rodada. O nível `DEBUG` acrescenta um cabeçalho e uma linha por evento:
-
-```text
-time,event,request_id,burst_id,server_id,active,queue_length
-```
-
-O coletor pode encaminhar cada novo evento diretamente ao logger:
-
-```python
-import logging
-import simpy
-
-from load_balancer_sim import MetricsCollector, SimulationLogger
-
-logging.basicConfig(level=logging.DEBUG, format="%(levelname)s %(message)s")
-simulation_logger = SimulationLogger()
-collector = MetricsCollector(
-    simpy.Environment(),
-    event_handler=simulation_logger.log_event,
-)
-```
-
-Ao montar uma rodada, chamar `log_run_started(config)` antes da execução e
-`log_run_completed(metrics)` depois do cálculo das métricas. A futura CLI será
-responsável por escolher entre `INFO` e `DEBUG`.
-
-## Requisitos
-
-- Python 3.11 ou mais recente;
-- `pip`.
+| `SimulationConfig` | Configura e valida uma rodada. Seus padrões ainda serão atualizados. |
+| `Request` | Mantém IDs, chegada, atribuição, início, conclusão e tempos derivados. |
+| `Server` | Processa requisições, mantém fila FIFO e registra estados. |
+| `ServerState` | Fotografia imutável do estado de um servidor. |
+| `LoadBalancer` | Seleciona um servidor pela política e inicia o atendimento. |
+| `RandomPolicy` | Escolhe um servidor pseudoaleatoriamente. |
+| `RoundRobinPolicy` | Distribui requisições ciclicamente. |
+| `ShortestQueuePolicy` | Escolhe a menor ocupação; o desempate ainda será ajustado. |
+| `PoissonTrafficGenerator` | Produz chegadas Poisson no ambiente SimPy. |
+| `MetricsCollector` | Preserva eventos e calcula as métricas atualmente disponíveis. |
+| `RunMetrics` | Resumo imutável de uma rodada. |
+| `SimulationLogger` | Emite configuração, eventos e resumo. |
+| `validate_simulation_invariants` | Valida topologia, ciclos de vida e conservação. |
 
 ## Preparação do ambiente
 
@@ -147,41 +99,16 @@ python -m pip install --upgrade pip
 python -m pip install -e ".[dev]"
 ```
 
-## Exemplo dos componentes atuais
+## Testes
 
-```python
-import simpy
-
-from load_balancer_sim import Request, Server, SimulationConfig
-
-config = SimulationConfig()
-environment = simpy.Environment()
-server = Server(
-    environment,
-    server_id=0,
-    capacity=config.server_capacity,
-    service_time=config.service_time,
-)
-request = Request(id=0, burst_id=0, arrival_time=environment.now)
-
-request.assign_to(server.id)
-environment.process(server.handle(request))
-environment.run()
-
-print(request.response_time)   # 0.05
-print(server.completed_count)  # 1
-```
-
-## Verificação
-
-Com o ambiente virtual ativado, execute toda a suíte de testes:
+Com o ambiente virtual ativado:
 
 ```bash
 pytest
 ```
 
-Os testes ficam em `tests/` e não dependem de tempo real: toda a passagem do
-tempo ocorre no relógio simulado do SimPy.
+Os testes usam somente o relógio simulado do SimPy e não dependem de espera em
+tempo real.
 
 ## Estrutura atual
 
@@ -190,20 +117,40 @@ src/load_balancer_sim/
 ├── __init__.py
 ├── config.py
 ├── invariants.py
+├── load_balancer.py
 ├── logs.py
 ├── metrics.py
 ├── request.py
-└── server.py
+├── server.py
+└── traffic.py
 
 tests/
 ├── test_config.py
 ├── test_environment.py
 ├── test_invariants.py
+├── test_load_balancer.py
 ├── test_logs.py
 ├── test_metrics.py
 ├── test_request.py
-└── test_server.py
+├── test_server.py
+└── test_traffic.py
 ```
 
-O roteiro completo, incluindo a divisão de responsabilidades da dupla, está em
-[PLANO_IMPLEMENTACAO.md](PLANO_IMPLEMENTACAO.md).
+Os notebooks em `notebooks/` são materiais auxiliares. O fluxo definitivo da
+simulação deve residir nos módulos do pacote, sem acessar atributos privados.
+
+## Próximo commit técnico
+
+O próximo marco recomendado é atualizar a configuração e o servidor para o
+serviço exponencial:
+
+```text
+server_capacity = 1
+service_rate = 1.0
+service_duration ~ Exponencial(service_rate)
+horizon = 5000
+warmup = 500
+```
+
+Os testes do servidor devem poder injetar durações determinísticas, enquanto a
+simulação real usa amostras exponenciais reproduzíveis.

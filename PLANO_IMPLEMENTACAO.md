@@ -1,577 +1,484 @@
 # Plano de implementação - Trabalho 1 de MC714
 
-Este documento transforma o enunciado de `MC714_2s2026.pdf` em um roteiro de implementação. A solução proposta usa **Python + SimPy**, porque o trabalho é uma simulação de eventos discretos e o SimPy já oferece relógio simulado, processos, filas e recursos com capacidade limitada.
+Este plano segue o enunciado atualizado `MC714_enunciado.pdf`. Quando houver
+divergência com `MC714_2s2026.pdf`, o enunciado atualizado tem precedência.
 
-> Prazo informado no enunciado: **22 de setembro de 2026**. O trabalho deve ser feito em dupla e entregue como um relatório IEEE de no máximo 4 páginas e um arquivo compactado com o código.
+> Prazo: **22 de setembro de 2026**. O trabalho deve ser desenvolvido em dupla
+> e entregue como um relatório IEEE de no máximo 4 páginas e um arquivo
+> compactado com o código-fonte.
 
-## 1. O que precisa ser entregue
+## 1. Especificação vigente
 
-A implementação obrigatória deve conter:
+### Sistema
 
 - 3 servidores homogêneos;
-- capacidade de 15 requisições simultâneas por servidor;
-- tempo de serviço constante de 0,05 unidade de tempo;
-- filas monitoradas durante toda a execução;
+- uma única unidade de processamento por servidor;
+- uma fila FCFS ilimitada por servidor;
+- chegadas segundo um processo de Poisson de taxa `lambda`;
+- intervalos entre chegadas exponenciais com média `1/lambda`;
+- tempos de serviço exponenciais com média `1/mu`;
+- `mu = 1,0` requisição por unidade de tempo, portanto `E[S] = 1`;
+- balanceador instantâneo, sem tempo próprio de processamento.
+
+Cada servidor é, sob a política aleatória, uma fila `M/M/1`. O
+`simpy.Resource` de cada servidor deve ter `capacity=1`. A fila do recurso pode
+permanecer ilimitada.
+
+### Políticas obrigatórias
+
+1. **Aleatória:** escolhe cada servidor com probabilidade `1/3`, de maneira
+   independente para cada requisição.
+2. **Round Robin:** produz a sequência cíclica `1, 2, 3, 1, 2, 3, ...`.
+3. **Fila Mais Curta:** minimiza o número total de requisições no servidor,
+   isto é, `active_count + waiting_count`; empates são resolvidos
+   aleatoriamente.
+
+### Experimentos estáveis
+
+- taxas `lambda` em `{0,6; 1,2; 1,8; 2,4; 2,7}`;
+- as 3 políticas para cada taxa: 15 configurações no total;
+- 5000 unidades de tempo por execução;
+- descarte das primeiras 500 unidades como warm-up;
+- janela oficial de medição: `[500, 5000)`, com duração 4500;
+- 10 réplicas de cada configuração, com sementes diferentes;
+- média e intervalo de confiança de 95% das 10 réplicas.
+
+O conjunto principal possui:
+
+```text
+5 taxas x 3 políticas x 10 réplicas = 150 execuções
+```
+
+### Experimento instável
+
+Executar também `lambda = 3,3` e observar o número de requisições no sistema ao
+longo do tempo. Como a capacidade total é `3*mu = 3`, a carga excedente é:
+
+```text
+lambda - 3*mu = 3,3 - 3 = 0,3 requisição por unidade de tempo
+```
+
+A aproximação fluida a comparar com a simulação é:
+
+```text
+N(t) ~= N(0) + (lambda - 3*mu)*t
+```
+
+### Métricas obrigatórias
+
+- vazão do sistema `X`;
+- tempo médio de resposta `E[R]`;
+- número médio de requisições no sistema `E[N]`;
+- utilização individual `U_i` de cada servidor.
+
+`E[N]` deve ser calculado pela área sob a curva de ocupação dividida pela
+duração da janela, e não pela média observada apenas nos instantes de chegada.
+
+### Modelagem analítica
+
+O modelo analítico completo é obrigatório apenas para a política Aleatória.
+Round Robin e Fila Mais Curta são avaliadas por simulação e comparadas com a
+referência analítica da política Aleatória.
+
+### Ponto extra opcional
+
+Escolher somente uma alternativa:
+
+- **buffer finito:** `K` em `{5, 10, 20}`, fila `M/M/1/K`, probabilidade de
+  perda `P_perda = p_K` e vazão efetiva `X = lambda*(1-P_perda)`;
+- **servidores heterogêneos:** `mu_1=1,5`, `mu_2=1,0`, `mu_3=0,5`, com pesos de
+  roteamento proporcionais a `mu_i`.
+
+O ponto extra só deve começar depois que todos os requisitos obrigatórios
+estiverem validados.
+
+## 2. Principais mudanças em relação ao enunciado antigo
+
+| Aspecto | Enunciado antigo | Enunciado vigente |
+| --- | --- | --- |
+| Chegadas | Pareto Limitada, Hurst 0,8 e rajadas | Poisson com taxa `lambda` |
+| Serviço | Constante em 0,05 | Exponencial com média 1 (`mu=1`) |
+| Concorrência | 15 por servidor | 1 por servidor |
+| Fila | Capacidade associada a 15 processamentos | FCFS ilimitada |
+| Horizonte | 200 | 5000, descartando as primeiras 500 |
+| Cenários | Rajadas 30, 60, 90 e 120 | `lambda` 0,6; 1,2; 1,8; 2,4; 2,7 |
+| Repetições principais | 120 execuções | 150 execuções |
+| Métricas | Vazão e resposta | Vazão, resposta, `E[N]` e `U_i` |
+| Modelo analítico | Divisão justa genérica, `M/M/15` sugerido | Aleatória, decomposição Poisson e três `M/M/1` |
+| Sobrecarga | Não especificada separadamente | Experimento adicional com `lambda=3,3` |
+
+Consequentemente, Pareto, Hurst, rajadas, capacidade 15, serviço constante de
+0,05 e modelo `M/M/15` não fazem mais parte do caminho obrigatório.
+
+## 3. Estado atual do repositório
+
+### Já implementado
+
+- pacote Python instalável com SimPy e pytest;
+- `SimulationConfig` imutável e validada;
+- entidade `Request` com ciclo de vida e tempos derivados;
+- `Server` baseado em `simpy.Resource`, fila FIFO e histórico de estados;
+- `MetricsCollector`, `RunMetrics` e eventos imutáveis;
+- invariantes de topologia, capacidade, ciclo de vida e conservação;
+- logs estruturados em `INFO` e `DEBUG`;
 - políticas Aleatória, Round Robin e Fila Mais Curta;
-- tráfego com Pareto Limitada e parâmetro de Hurst `H = 0,8`;
-- experimentos independentes para rajadas máximas de 30, 60, 90 e 120 requisições;
-- horizonte máximo de 200 unidades de tempo;
-- 10 repetições independentes de cada configuração;
-- throughput e tempo médio de resposta;
-- modelo analítico com probabilidade `1/3` de encaminhamento a cada servidor;
-- comparação quantitativa entre modelo e simulação;
-- logs da dinâmica do balanceamento;
-- instruções para execução em Windows e Linux.
+- `LoadBalancer` que atribui e encaminha requisições;
+- gerador Poisson reproduzível e processo de chegada integrado ao SimPy;
+- 119 testes automatizados aprovados em 8 de setembro de 2026;
+- notebooks de integração e configuração.
 
-Com 3 políticas, 4 limites de rajada e 10 repetições, o conjunto mínimo possui:
+### Desalinhamentos com o enunciado vigente
 
-```text
-3 x 4 x 10 = 120 execuções
-```
+- `SimulationConfig` ainda usa `server_capacity=15`, `service_time=0.05` e
+  `horizon=200` como padrões;
+- `Server` ainda usa duração de serviço constante;
+- não existe warm-up configurável;
+- as métricas ainda não calculam `E[N]` por integração temporal nem `U_i`;
+- Fila Mais Curta possui desempate determinístico pelo primeiro servidor, mas
+  o novo enunciado exige desempate aleatório;
+- a integração completa existe apenas em notebook e depende de monkey patch de
+  membros privados do servidor;
+- não existem `simulation.py`, executor das 150 rodadas, modelo analítico,
+  exportação CSV, gráficos ou CLI;
+- o notebook de configuração ainda contém trechos baseados no comportamento
+  antigo.
 
-## 2. Decisões que eu confirmaria com o professor
-
-O enunciado não define completamente o processo de chegada. Antes de congelar a implementação, eu perguntaria:
-
-1. A Pareto Limitada deve modelar o **intervalo entre chegadas**, o **tamanho das rajadas** ou períodos ON/OFF?
-2. Quais são os limites inferior e superior da distribuição, além dos máximos 30, 60, 90 e 120?
-3. Cada rajada deve ter exatamente 30, 60, 90 ou 120 requisições, ou esses números são limites máximos? A expressão “rajadas de no máximo 30” sugere que são máximos.
-4. Ao atingir `t = 200`, requisições que ainda estão no sistema devem ser descartadas da medição ou a geração deve parar e o sistema pode terminar de drená-las?
-5. O modelo analítico esperado é uma fila `M/M/15` por servidor, mesmo que a simulação tenha serviço determinístico e chegadas em rajadas?
-
-Sem uma resposta, eu adotaria e documentaria estas hipóteses:
-
-- o limite de rajada `B` é o máximo, não um tamanho fixo;
-- o tamanho de cada rajada é uma Pareto Limitada discretizada no intervalo `[1, B]`;
-- uso a relação usual de um modelo ON/OFF de cauda pesada, `H = (3 - alpha)/2`, resultando em `alpha = 3 - 2H = 1,4`;
-- todas as requisições de uma rajada chegam no mesmo instante, e os intervalos entre rajadas são configuráveis e também limitados;
-- a geração termina em `t = 200`; o throughput oficial conta conclusões até esse instante;
-- também registro o backlog em `t = 200`, para deixar explícitas as requisições censuradas;
-- o modelo `M/M/15` é tratado como uma aproximação analítica de referência, e não como descrição exata do tráfego Pareto com serviço determinístico.
-
-Essas escolhas precisam aparecer no relatório. A relação entre `H` e `alpha` depende do modelo de tráfego; portanto, não se deve apenas escrever `alpha = 1,4` sem explicar a hipótese ON/OFF adotada.
-
-## 3. Tecnologias e organização sugeridas
-
-### Dependências
-
-- Python 3.11 ou mais recente;
-- SimPy para a simulação de eventos discretos;
-- NumPy ou SciPy para os números aleatórios e a Pareto truncada;
-- pandas para consolidar as 10 repetições;
-- Matplotlib para os gráficos;
-- pytest para testes automatizados.
-
-### Estrutura do repositório
+## 4. Arquitetura alvo
 
 ```text
-lab1/
-├── README.MD
-├── pyproject.toml                # dependências e configuração do projeto
-├── src/
-│   └── load_balancer_sim/
-│       ├── __init__.py
-│       ├── config.py             # parâmetros e validação
-│       ├── request.py            # dados e timestamps da requisição
-│       ├── server.py             # servidor, recurso e fila
-│       ├── policies.py           # Random, Round Robin e Shortest Queue
-│       ├── traffic.py            # Pareto Limitada e traços de chegada
-│       ├── metrics.py            # eventos, métricas e agregação
-│       ├── analytical.py         # modelo M/M/15 e fórmulas
-│       ├── simulation.py         # montagem e execução de uma rodada
-│       ├── experiments.py        # matriz de 120 execuções
-│       ├── plots.py              # gráficos e tabelas
-│       └── cli.py                # interface de linha de comando
-├── tests/
-│   ├── test_traffic.py
-│   ├── test_policies.py
-│   ├── test_server.py
-│   ├── test_metrics.py
-│   ├── test_analytical.py
-│   └── test_integration.py
-├── configs/
-│   └── default.toml
-├── results/                      # CSVs e figuras gerados, não código manual
-└── report/                       # fonte LaTeX IEEE e referências
+Traço de carga reproduzível
+  - chegadas Poisson
+  - duração exponencial por request
+              |
+              v
+       LoadBalancer instantâneo
+       - random / RR / shortest
+          /        |        \
+         v         v         v
+      Server 0   Server 1   Server 2
+      M/M/1      M/M/1      M/M/1
+      FCFS        FCFS        FCFS
+          \        |        /
+           MetricsCollector
+           - eventos
+           - integrais de estado
+           - métricas da réplica
+                   |
+             CSV + agregação
+                   |
+          teoria + gráficos + relatório
 ```
 
-## 4. Arquitetura da simulação
-
-O fluxo de uma requisição seria:
+Para comparar políticas de forma justa, o traço de carga deve ser independente
+da política. Para cada par `(lambda, replica)`, gerar previamente:
 
 ```text
-Gerador de tráfego
-        |
-        v
-Balanceador -- escolhe uma política configurada
-        |
-        +----------+----------+
-        v          v          v
-   Servidor 0  Servidor 1  Servidor 2
-   15 slots    15 slots    15 slots
-   fila FIFO   fila FIFO   fila FIFO
-        \          |          /
-         +---- coletor de métricas ----> CSV + gráficos
+(request_id, arrival_time, service_duration)
 ```
 
-### Entidades principais
+As três políticas recebem exatamente os mesmos instantes de chegada e as
+mesmas demandas de serviço. A política Aleatória usa uma semente separada para
+o roteamento.
 
-`Request`
+## 5. Configuração alvo
 
-- `id`;
-- `burst_id`;
-- `arrival_time`;
-- `assigned_server`;
-- `service_start_time`;
-- `completion_time`;
-- `queue_time = service_start_time - arrival_time`;
-- `response_time = completion_time - arrival_time`.
-
-`Server`
-
-- contém um `simpy.Resource(capacity=15)`;
-- mantém `active_count`, tamanho da fila e máximo observado;
-- solicita um slot, espera, processa por `0.05` e libera o slot;
-- nunca usa tempo real (`sleep`); usa somente `yield env.timeout(0.05)`.
-
-`LoadBalancer`
-
-- recebe a lista dos três servidores e uma política;
-- chama `policy.select(servers)` a cada chegada;
-- registra a decisão `(tempo, request_id, servidor, ativos, filas)`;
-- não conhece detalhes internos do gerador de tráfego.
-
-`MetricsCollector`
-
-- recebe eventos de chegada, roteamento, início e fim de serviço;
-- guarda dados detalhados por requisição;
-- amostra ou registra por evento o estado de cada servidor;
-- calcula métricas somente a partir dos eventos, evitando contadores duplicados.
-
-Separar esses componentes permite testar as políticas sem executar a simulação completa.
-
-## 5. Passo a passo de implementação
-
-### Passo 1 - Criar configuração e execução mínima
-
-Criar uma configuração imutável com, pelo menos:
+Uma configuração de rodada deve convergir para algo semelhante a:
 
 ```python
 SimulationConfig(
     policy="round_robin",
     server_count=3,
-    server_capacity=15,
-    service_time=0.05,
-    burst_max=30,
-    hurst=0.8,
-    horizon=200.0,
+    server_capacity=1,
+    service_rate=1.0,
+    arrival_rate=1.8,
+    horizon=5000.0,
+    warmup=500.0,
     seed=12345,
 )
 ```
 
-Validar valores na entrada: política conhecida, `burst_max` pertencente a `{30, 60, 90, 120}`, capacidades positivas e `0 < H < 1`.
-
-**Pronto quando:** um comando carrega a configuração, cria um ambiente SimPy e encerra em `t = 200` sem tráfego.
-
-### Passo 2 - Implementar e testar uma requisição em um servidor
-
-Implementar `Server.handle(request)` como processo SimPy:
-
-1. registrar a chegada à fila;
-2. solicitar o `Resource`;
-3. ao obter o slot, registrar início do serviço;
-4. executar `yield env.timeout(0.05)`;
-5. registrar conclusão e liberar o recurso.
-
-O `with resource.request() as slot:` é conveniente porque garante a liberação do recurso.
-
-**Pronto quando:** um teste envia 16 requisições no mesmo instante, confirma que apenas 15 começam imediatamente e que a 16ª começa em `t = 0.05`.
-
-### Passo 3 - Implementar as três políticas
-
-Definir uma interface comum, por exemplo `select(servers, rng) -> Server`.
-
-1. **Aleatória:** selecionar uniformemente um índice entre 0 e 2 usando um gerador pseudoaleatório recebido por parâmetro.
-2. **Round Robin:** manter um contador privado e produzir `0, 1, 2, 0, 1, 2, ...`.
-3. **Fila Mais Curta:** minimizar uma tupla como `(waiting_count, active_count, server_id)`. Isso prioriza a menor fila de espera, depois o menor número em serviço e, por fim, resolve empates de forma determinística.
-
-O critério de desempate deve ser descrito no relatório. Outra opção válida é desempatar aleatoriamente, desde que seja reproduzível pela semente.
-
-**Pronto quando:** testes unitários comprovam a sequência Round Robin, a reprodutibilidade da política Aleatória e todas as situações de empate da Fila Mais Curta.
-
-### Passo 4 - Implementar a Pareto Limitada
-
-Para limites `x_min` e `x_max`, expoente `alpha > 0` e `x_min <= x <= x_max`, a função de distribuição acumulada é:
-
-```text
-F(x) = [1 - (x_min/x)^alpha] / [1 - (x_min/x_max)^alpha]
-```
-
-Pelo método da transformada inversa, com `u` uniforme em `[0,1)`:
-
-```text
-x = x_min / [1 - u(1 - (x_min/x_max)^alpha)]^(1/alpha)
-```
-
-Para uma rajada, eu usaria `x_min = 1`, `x_max = B`, converteria o resultado para inteiro e garantiria `1 <= tamanho <= B`. A regra de arredondamento deve ser única e testada.
-
-A média teórica da Pareto Limitada, útil para validar o gerador, é:
-
-```text
-E[X] = alpha*x_min^alpha / [1 - (x_min/x_max)^alpha]
-       * [x_max^(1-alpha) - x_min^(1-alpha)] / (1-alpha), alpha != 1
-```
-
-É possível usar `scipy.stats.truncpareto`, mas eu ainda escreveria um teste da fórmula e dos limites para evitar parametrizar `scale` e o limite normalizado incorretamente.
-
-**Pronto quando:** um teste com muitas amostras confirma os limites, a reprodutibilidade e uma média empírica próxima da média teórica.
-
-### Passo 5 - Gerar um traço de chegadas reutilizável
-
-Antes de comparar políticas, gerar uma lista imutável:
-
-```text
-ArrivalTrace = [(arrival_time, request_id, burst_id), ...]
-```
-
-Para cada par `(burst_max, repetição)`, gerar o traço apenas uma vez. Reutilizar exatamente esse traço nas três políticas. Isso evita que uma política pareça melhor apenas por ter recebido tráfego mais leve ao acaso.
-
-Sugestão para sementes:
-
-```text
-traffic_seed = base_seed + 1000 * burst_max + repetition
-routing_seed = traffic_seed + policy_specific_offset
-```
-
-A semente de tráfego não deve depender da política. A Aleatória pode ter uma segunda fonte de aleatoriedade apenas para o roteamento.
-
-**Pronto quando:** as três políticas recebem os mesmos tempos e IDs de chegada para a mesma repetição, e repetições distintas recebem traços independentes.
-
-### Passo 6 - Definir claramente a janela de medição
-
-Eu adotaria o seguinte protocolo:
-
-- gerar chegadas apenas com `arrival_time < 200`;
-- executar a medição oficial até `t = 200`;
-- contar como concluídas na janela apenas as requisições com `completion_time <= 200`;
-- registrar, em `t = 200`, quantas estão em serviço e quantas aguardam;
-- opcionalmente executar uma fase de drenagem separada, sem misturá-la com o throughput oficial.
-
-Essa decisão evita ultrapassar silenciosamente a duração máxima. Se o professor autorizar drenagem depois de `t = 200`, usar o tempo de resposta de todas as requisições que chegaram na janela e identificar essa regra no relatório.
-
-### Passo 7 - Implementar logs e invariantes
-
-Oferecer dois níveis de saída:
-
-- `INFO`: configuração e resumo de cada rodada;
-- `DEBUG`: uma linha por evento, adequada ao requisito de “logs detalhados”.
-
-Formato útil:
-
-```text
-time,event,request_id,burst_id,server_id,active,queue_length
-```
-
-Verificar durante ou ao fim de cada rodada:
-
-```text
-0 <= active_count <= 15
-arrivals = completed + waiting_at_end + active_at_end
-service_start >= arrival_time
-completion_time >= service_start_time
-```
-
-### Passo 8 - Calcular as métricas por rodada
-
-Para uma janela de tamanho `T = 200`:
-
-```text
-throughput = número de requisições concluídas até T / T
-response_time_i = completion_time_i - arrival_time_i
-average_response_time = média dos response_time_i concluídos na janela
-```
-
-Também registraria, mesmo não sendo obrigatório:
-
-- número de chegadas e conclusões;
-- requisições pendentes em `t = 200`;
-- tempo médio de espera;
-- utilização média por servidor;
-- comprimento médio e máximo das filas;
-- percentil 95 do tempo de resposta;
-- distribuição de requisições entre servidores.
-
-O CSV por rodada deve possuir uma linha com `policy`, `burst_max`, `repetition`, `seed` e todas as métricas. Manter outro CSV por requisição ajuda a auditar resultados, mas pode ser ativado apenas com uma opção para não gerar arquivos enormes.
-
-### Passo 9 - Executar e agregar os 120 experimentos
-
-Laços conceituais:
+`service_rate` representa `mu`. A duração de cada serviço é sorteada por:
 
 ```python
-for burst_max in (30, 60, 90, 120):
-    for repetition in range(10):
-        trace = generate_trace(burst_max, repetition)
-        for policy in ("random", "round_robin", "shortest_queue"):
-            result = run_once(trace, policy)
-            save(result)
+duration = rng.expovariate(service_rate)
 ```
 
-Calcular a média das 10 repetições para cada par `(policy, burst_max)`. Além da média exigida, calcular desvio-padrão e intervalo de confiança de 95%:
+Com `mu=1`, a média esperada é `1/mu = 1`. Para facilitar testes unitários, o
+servidor pode receber uma função fornecedora de durações; testes de fila e
+capacidade continuam usando durações determinísticas injetadas, enquanto as
+simulações reais usam a exponencial.
+
+## 6. Protocolo de medição
+
+Adotar a janela semiaberta `[warmup, horizon) = [500, 5000)`. Registrar eventos
+desde `t=0`, mas zerar ou recortar os acumuladores na fronteira do warm-up.
+
+### Vazão
 
 ```text
-IC95 = média +/- t_(0.975, 9) * desvio_amostral / sqrt(10)
+X = conclusões ocorridas na janela / 4500
 ```
 
-Com apenas 10 amostras, usar a distribuição t de Student é mais apropriado que usar diretamente `1,96`.
+### Tempo de resposta
 
-**Pronto quando:** há 120 linhas de resultados individuais e 12 linhas agregadas.
-
-### Passo 10 - Implementar o modelo analítico
-
-Como aproximação inicial, modelar cada servidor como uma fila `M/M/15` homogênea. O balanceamento justo produz:
+Usar as requisições concluídas durante a janela oficial e calcular:
 
 ```text
-lambda_s = lambda_total / 3
-mu = 1 / 0.05 = 20 requisições por unidade de tempo, por slot
-c = 15 slots por servidor
-capacidade por servidor = c*mu = 300
-capacidade total = 3*c*mu = 900 requisições por unidade de tempo
-rho = lambda_s / (c*mu) = lambda_total / 900
+R_i = completion_time_i - arrival_time_i
+E[R] = média dos R_i
 ```
 
-Usar como `lambda_total` a taxa média efetiva do traço de chegada, isto é, `arrivals / 200`, e informar esse valor em cada cenário. O regime estacionário só existe para `rho < 1`.
+Essa convenção deve ser aplicada igualmente às três políticas e declarada no
+relatório.
 
-Definindo `a = lambda_s/mu`, para `rho < 1`:
+### Número médio no sistema
+
+Para cada intervalo entre mudanças de estado, acumular:
 
 ```text
-P0 = 1 / [sum(n=0..c-1, a^n/n!) + a^c/(c!*(1-rho))]
-
-P_wait = [a^c/(c!*(1-rho))] * P0
-
-Wq = P_wait / (c*mu - lambda_s)
-
-W = Wq + 1/mu
+area += (active_count + waiting_count) * delta_t
+E[N] = soma das áreas dos três servidores / 4500
 ```
 
-Assim, `W` é o tempo médio de resposta teórico. Em regime estável, o throughput teórico total é aproximadamente `lambda_total`; se `lambda_total >= 900`, o modelo estacionário não é válido e a fila cresce sem limite.
+O trecho de um intervalo anterior ao warm-up ou posterior ao horizonte deve
+ser recortado antes da integração.
 
-Para evitar overflow em fatoriais e potências, calcular os termos recursivamente ou no domínio logarítmico.
+### Utilização por servidor
 
-#### Limitação que precisa ser discutida
-
-`M/M/15` supõe chegadas de Poisson e serviço exponencial. A simulação pedida tem chegadas Pareto em rajadas e serviço determinístico. Portanto, diferenças não são necessariamente erros: elas medem também o efeito de burstiness e da diferença entre os modelos.
-
-Se houver tempo, eu acrescentaria uma aproximação `M/D/15` ou uma aproximação `G/G/c` como análise complementar, mas manteria o `M/M/15` simples e completamente deduzido como baseline. Para a política Fila Mais Curta, a escolha é dependente do estado; por simetria, a fração marginal pode tender a `1/3`, mas seu tempo de resposta pode ser melhor que o previsto pelo modelo de divisão independente.
-
-### Passo 11 - Comparar simulação e teoria
-
-Para cada cenário, produzir uma tabela como:
+Como cada servidor possui uma unidade de processamento:
 
 ```text
-policy | burst_max | lambda | rho | throughput_sim | throughput_teo |
-erro_%_throughput | response_sim | response_teo | erro_%_response
+U_i = área sob active_count_i(t) / 4500
 ```
 
-Erro relativo:
+Assim, `0 <= U_i <= 1`.
+
+### Intervalo de confiança
+
+Para 10 réplicas, calcular a média, o desvio-padrão amostral e:
 
 ```text
-erro_relativo_% = 100 * abs(simulado - teórico) / abs(teórico)
+IC95 = média +/- t_(0,975; 9) * s/sqrt(10)
 ```
 
-Se o valor teórico for zero ou o sistema estiver instável, não calcular o percentual; marcar como não aplicável e explicar.
+## 7. Modelo analítico da política Aleatória
 
-Gráficos mais úteis para o relatório:
+### Decomposição do processo de Poisson
 
-1. throughput médio versus limite da rajada, uma curva por política;
-2. tempo médio de resposta versus limite da rajada, uma curva por política;
-3. simulado versus analítico, com barras de erro de 95%;
-4. um gráfico curto da fila ao longo do tempo para ilustrar a dinâmica, se houver espaço.
+Cada chegada escolhe um servidor com probabilidade `1/3`. Pelo teorema de
+splitting de Poisson, cada servidor recebe um processo Poisson independente de
+taxa:
 
-Não colocar todos os logs no relatório. Usar logs para validação e apresentar apenas gráficos e tabelas que respondam à comparação.
-
-### Passo 12 - Preparar CLI, documentação e empacotamento
-
-Comandos desejáveis:
-
-```bash
-python -m load_balancer_sim.cli run --policy round_robin --burst-max 60 --seed 123
-python -m load_balancer_sim.cli all --repetitions 10 --output results
-python -m load_balancer_sim.plots --input results/summary.csv
-pytest
+```text
+lambda_i = lambda/3
 ```
 
-O `README.MD` final deve explicar criação do ambiente, instalação, execução de uma rodada, execução completa e localização dos resultados. Preferir `pathlib` e evitar comandos ou caminhos exclusivos de um sistema operacional, para manter compatibilidade com Windows e Linux.
+Cada servidor é uma fila `M/M/1` com `mu=1` e:
 
-## 6. Plano de testes
+```text
+rho = lambda_i/mu = lambda/3
+```
 
-### Testes unitários
+A condição de estabilidade é:
 
-- amostras Pareto sempre dentro dos limites;
-- média empírica coerente com a expressão teórica;
-- mesma semente gera o mesmo traço;
-- Round Robin produz sequência cíclica exata;
-- Aleatória só retorna servidores válidos e é reproduzível;
-- Fila Mais Curta seleciona corretamente e resolve empates como documentado;
-- servidor nunca excede 15 requisições ativas;
-- tempo de serviço é exatamente 0,05;
-- fórmulas de Erlang C batem com casos calculados à mão.
+```text
+lambda < 3*mu = 3
+```
 
-### Testes de integração e sanidade
+### Fórmulas por servidor
 
-- com uma única requisição e servidor livre, o tempo de resposta é 0,05;
-- com 16 requisições simultâneas em um servidor, 15 terminam em 0,05 e uma em 0,10;
-- sob carga baixa, throughput fica próximo da taxa de chegada e resposta próximo de 0,05;
-- sob sobrecarga, o backlog e as filas crescem;
-- `arrivals = completed + active + queued` no fim da janela;
-- as três políticas recebem o mesmo traço em comparações pareadas;
-- repetir o comando com as mesmas sementes produz arquivos idênticos, exceto por metadados dispensáveis.
+Para `lambda < 3`:
 
-## 7. Estrutura sugerida para o relatório de 4 páginas
+```text
+p_k = (1-rho)*rho^k
+U_i = rho
+E[N_i] = rho/(1-rho)
+E[T_Q] = rho/(mu-lambda/3)
+E[R] = 1/(mu-lambda/3)
+```
 
-Como o limite é curto, eu distribuiria o espaço assim:
+### Fórmulas do sistema
 
-1. **Resumo:** problema, três políticas, método e principal resultado.
-2. **Arquitetura e metodologia:** diagrama pequeno, servidores, capacidade, serviço, tráfego, parâmetros, sementes e 10 repetições.
-3. **Modelo analítico:** divisão `1/3`, `lambda_s`, `mu`, `rho`, Erlang C, hipóteses e limitações.
-4. **Resultados e discussão:** dois gráficos principais, uma tabela compacta, IC de 95% e explicação das diferenças.
-5. **Conclusão:** qual política se saiu melhor, efeito das rajadas e limitações.
-6. **Divisão do trabalho:** uma frase ou tabela curta, compatível com os commits.
+```text
+X = lambda
+E[N] = 3*E[N_i]
+E[N] = X*E[R]                 # Lei de Little
+```
 
-Começar o relatório cedo, já no template IEEE de duas colunas. Os resultados devem ser gerados automaticamente pelo código, para evitar copiar números incorretos manualmente.
+Com `mu=1`, os valores de referência são:
 
-## 8. Ordem prática de trabalho da dupla
+| lambda | rho = U_i | E[N_i] | E[T_Q] | E[R] | E[N] | X |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 0,6 | 0,2 | 0,25 | 0,25 | 1,25 | 0,75 | 0,6 |
+| 1,2 | 0,4 | 0,6667 | 0,6667 | 1,6667 | 2,0 | 1,2 |
+| 1,8 | 0,6 | 1,5 | 1,5 | 2,5 | 4,5 | 1,8 |
+| 2,4 | 0,8 | 4,0 | 4,0 | 5,0 | 12,0 | 2,4 |
+| 2,7 | 0,9 | 9,0 | 9,0 | 10,0 | 27,0 | 2,7 |
 
-Uma divisão equilibrada, mantendo revisão cruzada, seria:
+Vazão e utilização devem valer para as três políticas por conservação de
+trabalho e simetria. O tempo de resposta esperado deve obedecer
+aproximadamente:
 
-- integrante A: servidor, métricas, logs e testes de capacidade;
-- integrante B: tráfego Pareto, políticas e testes de distribuição;
-- ambos: protocolo experimental, modelo analítico, gráficos e relatório;
-- cada integrante revisa o código produzido pelo outro.
+```text
+E[R]_FilaMaisCurta <= E[R]_RoundRobin <= E[R]_Aleatoria
+```
 
-Fazer commits pequenos e descritivos. A divisão declarada no relatório deve refletir o histórico real do repositório.
+Para cada `lambda`, calcular também o ganho percentual em relação à Aleatória:
 
-### Próximos passos a partir do estado atual
+```text
+ganho_% = 100*(E[R]_aleatoria - E[R]_politica)/E[R]_aleatoria
+```
 
-Os módulos individuais do integrante A estão concluídos: requisição, servidor,
-monitoramento, métricas, invariantes, logs e testes de capacidade. O próximo
-passo imediato deve ser executado pelo **integrante B**. A integração da dupla
-descrita mais adiante depende das interfaces de políticas e tráfego estarem
-implementadas e testadas primeiro.
+## 8. Próximos commits recomendados
 
-#### Primeiro: trabalho do integrante B
+### Commit 1 - Serviço exponencial e configuração vigente
 
-O integrante B deve começar pelas políticas, pois elas já podem ser testadas
-diretamente com os servidores existentes e não dependem do gerador de tráfego.
-A sequência recomendada é:
+- substituir os padrões antigos por capacidade 1, `mu=1`, horizonte 5000 e
+  warm-up 500;
+- sortear duração exponencial com média `1/mu`;
+- garantir sementes reproduzíveis;
+- permitir injeção de duração determinística nos testes;
+- atualizar testes de servidor, configuração, logs e invariantes.
 
-1. Criar `policies.py` com uma interface comum `select(servers, rng) -> Server`.
-2. Implementar Round Robin e testar a sequência cíclica exata.
-3. Implementar a política Aleatória com o gerador pseudoaleatório recebido por
-   parâmetro e testar sua reprodutibilidade.
-4. Implementar Fila Mais Curta usando o desempate determinístico
-   `(waiting_count, active_count, server_id)` e testar todos os empates.
-5. Criar `traffic.py` com a Pareto Limitada, limites explícitos e transformação
-   inversa.
-6. Testar limites, reprodutibilidade e proximidade entre média empírica e média
-   teórica da distribuição.
-7. Representar cada chegada com tempo, `request_id` e `burst_id`, formando um
-   traço imutável e reutilizável.
-8. Gerar o traço com uma semente independente da política e comprovar que as
-   três políticas recebem exatamente as mesmas chegadas em cada repetição.
+**Pronto quando:** amostras são positivas, a média empírica se aproxima de 1,
+a mesma semente reproduz os valores e os testes de FCFS continuam passando.
 
-Essas entregas também devem ser separadas em commits pequenos. Uma divisão
-adequada seria: interface e Round Robin; política Aleatória; Fila Mais Curta;
-Pareto Limitada; traço reproduzível; testes complementares e documentação.
+### Commit 2 - Observabilidade pública do servidor
 
-O trabalho individual do integrante B estará pronto para integração quando:
+- adicionar callbacks públicos de início e conclusão do serviço;
+- ligar esses callbacks ao `MetricsCollector`;
+- remover do notebook o monkey patch de `_resource`, `_record_state` e
+  `_completed_count`.
 
-- as três políticas passarem em seus testes unitários;
-- a Pareto Limitada respeitar os limites e a semente;
-- o mesmo par `(burst_max, repetição)` sempre produzir o mesmo traço;
-- a geração do traço não depender da política selecionada;
-- as interfaces públicas estiverem exportadas pelo pacote e documentadas no
-  `README.MD`.
+**Pronto quando:** o ciclo `arrival -> routing -> service_started ->
+service_completed` é coletado automaticamente em um teste de integração.
 
-#### Depois: trabalho conjunto da dupla
+### Commit 3 - Políticas e balanceador alinhados
 
-As atividades abaixo devem começar somente depois que o integrante B concluir
-e estabilizar as interfaces anteriores. Assim, a integração não precisará usar
-implementações provisórias de política ou tráfego.
+- separar as políticas em `policies.py`;
+- validar servidores, ambientes e requisições;
+- remover `**kwargs` da construção do balanceador;
+- tornar aleatório o desempate de Fila Mais Curta;
+- testar todos os empates e a reprodutibilidade.
 
-1. Revisar em conjunto as políticas, o gerador Pareto e os módulos basilares já
-   implementados pelo integrante A.
-2. Criar o balanceador, responsável por selecionar o servidor, atribuir a
-   requisição e registrar o evento de roteamento.
-3. Criar `simulation.py` para montar uma rodada com a configuração, o ambiente
-   SimPy, os três servidores, a política, o traço, o coletor e o logger.
-4. Integrar automaticamente os eventos de chegada, roteamento, início e
-   conclusão, eliminando chamadas manuais ao coletor no fluxo principal.
-5. Completar o Passo 1 com uma execução mínima sem tráfego até o horizonte e,
-   em seguida, executar traços reais respeitando a janela do Passo 6.
-6. Adicionar testes de integração para carga baixa, sobrecarga, backlog,
-   conservação, igualdade dos traços entre políticas e reprodutibilidade.
-7. Criar `experiments.py`, executar as 120 rodadas e salvar resultados
-   individuais e agregados em CSV, com média, desvio-padrão e IC de 95%.
-8. Implementar e revisar em conjunto o modelo analítico, a comparação entre
-   teoria e simulação e os gráficos.
-9. Preparar a CLI, conferir a execução em Windows e Linux e finalizar o
-   `README.MD` com comandos e localização dos resultados.
-10. Escrever o relatório, revisar a divisão do trabalho contra os commits e
-    repetir todos os experimentos com a versão final do código.
+### Commit 4 - Métricas temporais
 
-Durante essa fase, cada integrante deve revisar o código do outro. Alterações
-de integração, protocolo experimental, modelo analítico, gráficos e relatório
-devem ser tratadas como trabalho conjunto no histórico do repositório.
+- adicionar `E[N]` por integração da ocupação;
+- adicionar `U_1`, `U_2` e `U_3` por integração do tempo ocupado;
+- aplicar corretamente o recorte `[500, 5000)`;
+- testar integrais com trajetórias pequenas calculadas manualmente.
 
-## 9. Cronograma sugerido
+### Commit 5 - Executor de uma rodada
 
-- **Semana 1:** esclarecer ambiguidades, montar estrutura, servidor e requisição.
-- **Semana 2:** três políticas e testes unitários.
-- **Semana 3:** gerador Pareto, traços reproduzíveis e logs.
-- **Semana 4:** executor das 120 rodadas, métricas e CSVs.
-- **Semana 5:** modelo analítico, validação e gráficos.
-- **Semana 6:** relatório IEEE, execução em Windows/Linux e revisão final.
+Criar `simulation.py` para montar configuração, ambiente, três servidores,
+balanceador, traço, coletor e logger. A execução deve retornar um objeto
+imutável com métricas, eventos necessários e metadados da semente.
 
-Reservar alguns dias para repetir todos os experimentos depois da última alteração. Não misturar resultados de versões diferentes do simulador.
+### Commit 6 - Experimentos estáveis
 
-## 10. Materiais para estudo
+- executar as 150 rodadas;
+- usar o mesmo traço nas três políticas de cada `(lambda, replica)`;
+- salvar resultados individuais e agregados;
+- calcular IC de 95%;
+- verificar `X`, `U_i` e Lei de Little.
 
-### Simulação com SimPy
+### Commit 7 - Modelo analítico e comparação
 
-- [Visão geral do SimPy](https://simpy.readthedocs.io/en/stable/index.html): introdução à simulação de eventos discretos.
-- [Conceitos básicos do SimPy](https://simpy.readthedocs.io/en/stable/topical_guides/simpy_basics.html): ambiente, eventos e processos geradores.
-- [Recursos compartilhados](https://simpy.readthedocs.io/en/stable/topical_guides/resources.html): base para representar os 15 slots de cada servidor.
-- [Monitoramento no SimPy](https://simpy.readthedocs.io/en/stable/topical_guides/monitoring.html): exemplos de coleta de uso e tamanho de fila.
+- implementar as fórmulas `M/M/1`;
+- gerar automaticamente a tabela teórica;
+- comparar `E[R]` simulado com a curva analítica;
+- calcular ganhos de Round Robin e Fila Mais Curta.
 
-### Pareto, dados e gráficos
+### Commit 8 - Experimento instável
 
-- [Pareto truncada no SciPy](https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.truncpareto.html): definição, suporte, parâmetros e geração de amostras.
-- [GroupBy no pandas](https://pandas.pydata.org/pandas-docs/stable/user_guide/groupby.html): agregação das 10 repetições.
-- [Introdução ao Matplotlib](https://matplotlib.org/stable/users/getting_started/index.html): geração dos gráficos do relatório.
+- executar `lambda=3,3`;
+- registrar `N(t)`;
+- comparar com a reta de inclinação `0,3`;
+- deixar explícito que métricas estacionárias não se aplicam.
 
-### Qualidade e relatório
+### Commit 9 - CLI, gráficos e documentação final
 
-- [Documentação do pytest](https://docs.pytest.org/en/stable/): testes unitários, fixtures e parametrização.
-- [Templates oficiais de conferência IEEE](https://conferences.ieeeauthorcenter.ieee.org/write-your-paper/authoring-tools-and-templates/): modelo de duas colunas em LaTeX ou Word.
+- comandos para uma rodada e para todos os experimentos;
+- CSVs e gráficos reproduzíveis;
+- execução conferida em Windows e Linux;
+- README final e relatório IEEE.
 
-Ao estudar filas, procurar especificamente pelos termos **Erlang C**, **fila M/M/c**, **utilização rho**, **Little's Law** e **simulação de eventos discretos**. Para tráfego auto-similar, estudar **modelos ON/OFF de cauda pesada**, deixando claro que a conversão entre Hurst e o expoente de Pareto depende das hipóteses do modelo.
+## 9. Testes essenciais
 
-## 11. Checklist final
+### Serviço e servidor
 
-- [ ] As ambiguidades do tráfego foram confirmadas ou documentadas como hipóteses.
-- [ ] Existem exatamente 3 servidores homogêneos com capacidade 15.
-- [ ] O tempo de serviço é fixo em 0,05.
-- [ ] As três políticas são selecionáveis por configuração.
-- [ ] Os quatro limites de rajada foram executados separadamente.
-- [ ] Cada configuração tem 10 sementes independentes.
-- [ ] As políticas usam o mesmo traço de chegada em cada comparação.
-- [ ] Nenhuma chegada ocorre depois de `t = 200`.
-- [ ] Throughput e tempo médio de resposta possuem definição explícita.
-- [ ] Filas, ativos e backlog são monitorados.
-- [ ] O modelo analítico usa transição `1/3` e documenta suas hipóteses.
-- [ ] Há comparação numérica, erro relativo e gráficos com barras de erro.
-- [ ] Testes automatizados passam.
-- [ ] O projeto executa em Windows e Linux.
-- [ ] O relatório está em formato IEEE e possui no máximo 4 páginas.
-- [ ] A divisão do trabalho é compatível com os commits.
-- [ ] Os arquivos finais seguem os nomes exigidos no enunciado.
+- todo tempo exponencial sorteado é positivo;
+- média empírica próxima de `1/mu`;
+- mesma semente produz mesma sequência;
+- capacidade ativa nunca excede 1;
+- fila mantém ordem FCFS;
+- uma função de duração determinística pode ser injetada nos testes.
+
+### Políticas
+
+- Aleatória é reproduzível e aproximadamente uniforme;
+- Round Robin produz a sequência exata;
+- Fila Mais Curta usa `active + waiting`;
+- todos os servidores empatados participam do sorteio de desempate.
+
+### Medição
+
+- eventos anteriores a 500 não entram nas métricas;
+- intervalos que cruzam 500 ou 5000 são recortados;
+- `E[N]` é uma integral temporal;
+- `0 <= U_i <= 1`;
+- conservação de requisições continua válida;
+- `E[N] ~= X*E[R]` dentro da incerteza estatística.
+
+### Sanidade do sistema
+
+- com `lambda` muito pequeno, `E[R]` tende a `E[S]=1` em qualquer política;
+- na política Aleatória, os resultados convergem às fórmulas `M/M/1`;
+- para `lambda<3`, vazão tende a `lambda`;
+- para `lambda=3,3`, `N(t)` cresce aproximadamente a taxa 0,3.
+
+## 10. Estrutura sugerida para o relatório
+
+1. **Resumo:** sistema, políticas, simulação e principal conclusão.
+2. **Arquitetura e metodologia:** três `M/M/1`, parâmetros, warm-up, réplicas,
+   sementes e métricas temporais.
+3. **Modelo analítico:** itens (a)-(f), incluindo splitting, estabilidade,
+   fórmulas, Lei de Little e sobrecarga.
+4. **Resultados:** tabela e gráfico de `E[R]`, IC de 95%, vazão, utilizações,
+   `E[N]` e ganhos percentuais.
+5. **Conclusão:** ordenação das políticas, estabilidade e limitações.
+6. **Divisão do trabalho:** compatível com os commits da dupla.
+
+Os resultados, tabelas e gráficos devem ser gerados pelo código para evitar
+transcrição manual. O relatório deve usar o formato IEEE de duas colunas e ter
+no máximo 4 páginas.
+
+## 11. Divisão de trabalho e checklist
+
+Uma divisão compatível com o histórico atual é:
+
+- integrante responsável pela base: servidor, serviço exponencial, eventos,
+  logs, métricas temporais, invariantes e testes correspondentes;
+- outro integrante: políticas, tráfego Poisson, balanceador e testes;
+- ambos: integração, protocolo experimental, modelo analítico, gráficos e
+  relatório.
+
+Checklist obrigatório:
+
+- [ ] 3 servidores homogêneos com uma unidade de serviço cada.
+- [ ] Filas FCFS ilimitadas.
+- [ ] Chegadas Poisson reproduzíveis.
+- [ ] Serviço exponencial com `mu=1`.
+- [ ] Três políticas configuráveis e desempate correto.
+- [ ] Horizonte 5000 e warm-up 500.
+- [ ] Cinco taxas estáveis, três políticas e dez réplicas: 150 execuções.
+- [ ] Média e IC de 95%.
+- [ ] `X`, `E[R]`, `E[N]` temporal e `U_i`.
+- [ ] Modelo analítico apenas da Aleatória, com três `M/M/1`.
+- [ ] Comparação de `E[R]` e ganhos percentuais.
+- [ ] Lei de Little conferida nas três políticas.
+- [ ] Experimento instável com `lambda=3,3` e aproximação fluida.
+- [ ] Logs detalhados de distribuição e ocupação.
+- [ ] Testes automatizados e execução em Windows e Linux.
+- [ ] Relatório IEEE com até 4 páginas.
+- [ ] Divisão da dupla compatível com os commits.
