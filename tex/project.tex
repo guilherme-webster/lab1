@@ -1,0 +1,502 @@
+\documentclass[conference]{IEEEtran}
+
+\usepackage{amsmath}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{cite}
+\usepackage{url}
+\usepackage{verbatim}
+\usepackage{float}
+\usepackage{stfloats}
+\usepackage{placeins}
+
+\begin{document}
+
+\title{Relatório}
+
+\author{
+\IEEEauthorblockN{Guilherme Webster Chamoun}
+\IEEEauthorblockA{Instituto de Computação \\ Universidade Estadual de Campinas \\ g257111@dac.unicamp.br}
+\and
+\IEEEauthorblockN{Gabriel Cunha Marchetti}
+\IEEEauthorblockA{Instituto de Computação \\ Universidade Estadual de Campinas \\ g251055@dac.unicamp.br}
+}
+
+\maketitle
+
+\begin{abstract}
+ Por meio deste relatório apresentamos as conclusões referentes ao \textit{benchmarking} de um \textit{load balancer} o qual implementa 3 políticas distintas: \textit{Random Choice}, SQF (\textit{Shortest Queue First}) e \textit{Round Robin}. Adicionar observalçoes posteriores 
+\end{abstract}
+
+\section{Introdução}
+
+\noindent O balanceador de carga funciona como uma camada de abstração, que evita a comunicação direta entre servidor e cliente, tal incremento evita afogamento dos canais de comunicação entre servidor e cliente, por exemplo. Dessa forma, as políticas a serem adotadas no balanceador variam e afetam, de maneira discernível e mensurável, o desempenho da comunicação observada pelo cliente. Uma das formas de fazer este discernimento seria por meio da comparação do tempo de resposta médio no contexto de cada política. No caso do presente estudo, implementou-se um \textit{Load Balancer} o qual atende 3 servidores homogêneos, variando a política entre 3 alternativas. Ademais, foi desenvolvido um modelo analítico o qual serve como forma de validação dos experimentos realizados em ambiente computacional.
+
+\section{Arquitetura}
+
+\noindent O \textit{Load Balancer} implementado recebe uma requisição e a encaminha para algum dos três servidores, de acordo com a política sendo utilizada. Nossa implementação utiliza uma interface denominada \texttt{route\_request}, que determina para qual servidor a requisição deve ser destinada. Nesse sentido, cada política implementa um método \texttt{select\_server} que é invocado dentro da interface de \texttt{route\_request}. Veja que essa abordagem é preferível, pois novas políticas não alteraram a interface.
+
+\section{Políticas}
+
+\noindent Dentre as 3 políticas implementadas, podemos citar
+
+\begin{itemize}
+    \item \textbf{\textit{Random Choice}}: a requisição é encaminhada de maneira aleatória a algum dos servidores. Por conseguinte, a probabilidade de uma requisição ir para um dado servidor é 1/3. 
+    \item \textbf{\textit{Shortest Queue First}} (\textit{SQF}): envia a requisição para o servidor com menor fila, ou seja para o menos "ocupado"; poderíamos enxergar esta política como uma abordagem gulosa para o problema.
+    \item \textbf{\textit{Round Robin}}: distribui uma requisição para cada servidor em ordem (1,2,3, 1,2,3 ...). Portanto, em um ciclo, cada servidor recebeu, garantidamente, uma requisição.
+\end{itemize}
+
+\section{Modelagem analítica}
+
+Vamos começar com a demonstração analítica do problema para servir de base para as análises empíricas desenvolvidas. Para começar, vamos enunciar Teorema de Decomposição de Poisson.
+
+\textbf{Teorema de Decomposição de Poisson}: Seja $N(t)$ um processo de Poisson com parâmetro $\lambda$. Seja $p_i$ a probabilidade de tal requisição ser direcionada para o servidor $i$, de modo que $\sum_{i} p_i = 1$, então cada servidor com processo $N_i (t)$ é um processo de Poisson com taxa de chegada $\lambda_i = \lambda \cdot p_i$ e, além disso, cada par $N_k (t), N_j (t), i \neq j$ são i.i.d.
+
+\textbf{Demonstração}: Suponha que $N(t) = n$, para o intervalo $[0, t]$, então também é possível supor que para cada $N_i(t) = n_i$, dentro de um mesmo intervalo, assim como $\sum_i n_i = n$.
+
+Note que:
+
+$$
+Pr(N_1(t) = n_1, \cdots, N_k(t) = n_k | N(t) = n) = \frac{n!}{n_1!\cdots n_k!} p_1^{n_1} \cdots p_k^{n_k}
+$$
+
+Para facilitar, seja $\Lambda(t)$ a proposição de que $N_1(t) = n_1, \cdots, N_k(t)$, então:
+
+$$
+Pr(\Lambda(t) | N(t) = n) = \frac{n!}{n_1!\cdots n_k!} p_1^{n_1} \cdots p_k^{n_k}
+$$
+
+Como $Pr(A) = Pr(A|B) \cdot Pr(B)$, então
+
+$$
+Pr(\Lambda(t)) = Pr(\Lambda(t) | N(t) = n) \cdot Pr(N(t) = n)
+$$
+
+\begin{align*}
+Pr(\Lambda(t)) &= \frac{n!}{n_1!\cdots n_k!} p_1^{n_1} \cdots p_k^{n_k} \frac{(\lambda t)^n \cdot e^{-\lambda t}}{n!} \\ 
+&= \frac{n!}{n_1!\cdots n_k!} p_1^{n_1} \cdots p_k^{n_k} \frac{(\lambda t)^n \cdot e^{-\lambda \sum_k p_k t}}{n!} \\ 
+&= \Pi_{i=1}^k \frac{(\lambda p_i t)^n_i e^{- \lambda p_i t}}{n_i !}
+\end{align*}
+
+Logo, temos que $N_i (t) \approx Poisson(\lambda_i t)$
+
+No nosso caso, temos que $p_i = \frac{1}{3}$, logo para qualquer servidor homogêneo, temos que $N_i(t) \approx Poisson(\lambda/3 t)$. Além disso, note que eles são independentes, pois suas probabilidades se multiplicam, isto é, $Pr(\Lambda(t)) = \Pi_i Pr(N_i(t))$
+
+Agora, devemos demonstrar que cada servidor é uma fila \textbf{M/M/1}. Contudo, isso é evidente, pois estamos com uma distribuição de \textit{Poisson} na entrada, assim como o tempo de serviço é exponencial por definição (enunciado).
+
+Portanto, dado que:
+
+$$
+p_k = (1 - \rho) \cdot \rho^k
+$$
+
+$\rho = \frac{\lambda_i}{3} = \frac{\lambda/3}{\mu} = \frac{\lambda}{3}$, pois $\mu = 1$.
+
+Então, note que
+
+\begin{align*}
+U_i &= Pr(N_i \geq 1) = 1 - Pr(N_i = 0) = 1 - (1 - \rho) \rho^0 = \rho \\
+&= \lambda/3
+\end{align*}
+
+Assim como,
+
+\begin{align*}
+E[N_i] &= \sum_k k \cdot p_k = \sum_k k \cdot (1 - \rho) \cdot \rho^{k} \\ 
+&= (1 - \rho) \cdot \rho \cdot \frac{1}{(1-\rho)^2} \\ 
+&= \frac{\rho}{1 - \rho}
+\end{align*}
+
+Portanto, temos que:
+
+\begin{align*}
+    E[N_i] = \frac{\lambda/3}{1 - \lambda/3} = \frac{\lambda}{3 - \lambda}
+\end{align*}.
+
+Dessa forma, fica claro que pela Lei de Little:
+
+\begin{align*}
+    E[N_i] &= \lambda_i * E[R] \implies E[R] = \frac{E[N_i]}{\lambda_i} \\ 
+    E[R] &= \frac{3}{\lambda} \cdot \frac{\lambda}{3 - \lambda} = \frac{3}{3 - \lambda}
+\end{align*}
+
+Por fim, temos que:
+
+\begin{align*}
+    E[R] &= E[T_Q] + E[S] \implies E[T_Q] = E[R] - E[S] \\ 
+E[T_Q] &= \frac{3}{3-\lambda} - \frac{1}{\mu} = \frac{\lambda}{3 - \lambda}
+\end{align*}
+
+\textbf{Condição de estabilidade}: Para que as filas não crescam indefinitivamente, temos que $\rho < 1$, logo:
+
+$$
+\frac{\lambda}{3 \mu} < 1 \implies \lambda < 3,0 \text{req/s}
+$$
+
+Veja que essa condição faz sentido considerando que cada requisição é atendida em uma unidade de tempo. Dessa forma, temos que a vazão do sistema será $X = \lambda$, sob a condição de estabilidade.
+
+Para valores de referência, vamos observar a tabela a seguir que resume os resultados:
+
+\begin{table}[h]
+\centering
+\caption{Resultados esperados da análise teórica.}
+\label{tab:simulations}
+    \begin{tabular}{ccccccc}
+\toprule
+$\lambda$ & Vazão & Utilização & $E[N_i]$ & $E[N]$ & $E[T_Q]$ & $E[R]$ \\
+\midrule
+0.6 & 0.6 & 20\% & 0.25 & 0.75 & 0.25 & 1.25 \\
+1.2 & 1.2 & 40\% & 0.67& 2.00 & 0.67 & 1.67 \\
+1.8 & 1.8 & 60\% & 1.50 & 4.50 & 1.50 & 2.50 \\
+2.4 & 2.4 & 80\% & 4.00 & 12.00 & 4.00 & 5.00 \\
+2.7 & 2.7 & 90\% & 9.00 & 27.00 & 9.00 & 10.00 \\
+3.3 & - & 100\% & - & - & - & - \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Note que essa modelagem teórico precisa ser comparada com a observada experimentalmente. Contudo, podemos argumentar que para qualquer requisição que respeite a condição de estabilidade irá ser atendida por um servidor, de modo que nas métricas globais, teremos que todo servidor será utilizado igualmente, assim como a vazão do sistema também será mantida. Veja que uma forma mais clara de enxergar isso é o fato de que para qualquer política aplicada, seja $R$ uma requisição que deve ser atendida, pois atende a condição de estabilidade, então se estamos na condição de \textit{Round-Robin} é claro que a utilização será a mesma para cada servidor, pois as requisições são idênticas, assim como para \textit{SQF} ela irá para aquela que tem menor utilização e, portanto, haverá uma convergência para o valor obtido da modelagem aleatória. Apesar de ser importante observar que empiricamente podemos observar variações para experimentos para o caso aleatório, uma vez que as demonstrações desenvolvidas só garantem para uma média de exemplos.
+
+\noindent  
+
+\begin{comment}
+     Métricas: vazão do sistema (X), tempo médio de resposta (E[R]), número médio de
+requisições no sistema (E[N]) e utilização de cada servidor (Ui).
+ Execute também um experimento adicional com λ = 3,3 e observe o que acontece com o
+tamanho das las ao longo do tempo.
+\end{comment}
+
+
+\section{Resultados e Discussão}
+
+Dessa forma, podemos apresentar resultados obtidos da execução dos experimentos, eles são apresentados nas tabelas Tabela \ref{tab:simulations_random}, Tabela \ref{tab:simulations_round_robin} e Tabela \ref{tab:simulations_shortest_queue}. 
+
+% \begin{table}[h!]
+% \centering
+% \caption{Resultados obtidos dos experimentos para a política aleatória.}
+% \label{tab:simulations_random}
+% \begin{tabular}{ccccc}
+% \toprule
+% $\lambda$ & $X$ & $U_i$ & $E[R]$ & $E[N]$ \\
+% \midrule
+% 0.6 & $0.6059 \pm 0.0078$ & $0.2023 \pm 0.0030$ & $1.2587 \pm 0.0288$ & $0.7625 \pm 0.0170$ \\
+% 1.2 & $1.2007 \pm 0.0094$ & $0.4010 \pm 0.0060$ & $1.6762 \pm 0.0462$ & $2.0132 \pm 0.0627$ \\
+% 1.8 & $1.8062 \pm 0.0193$ & $0.6048 \pm 0.0078$ & $2.5572 \pm 0.0954$ & $4.6204 \pm 0.1974$ \\
+% 2.4 & $2.3957 \pm 0.0145$ & $0.8010 \pm 0.0102$ & $5.0711 \pm 0.4594$ & $12.1535 \pm 1.1671$ \\
+% 2.7 & $2.6878 \pm 0.0122$ & $0.8993 \pm 0.0051$ & $10.3391 \pm 1.0409$ & $27.7937 \pm 2.8292$ \\
+% \bottomrule
+% \end{tabular}
+% \end{table}
+
+\begin{table}[H]
+\centering
+\caption{Resultados obtidos dos experimentos para a política aleatória: Vazão ($X$) e Utilização ($U_i$).}
+\label{tab:simulations_random_throughput_utilization}
+\begin{tabular}{ccc}
+\toprule
+$\lambda$ & $X$ & $U_i$ \\
+\midrule
+0.6 & $0.6059 \pm 0.0078$ & $0.2023 \pm 0.0030$ \\
+1.2 & $1.2007 \pm 0.0094$ & $0.4010 \pm 0.0060$ \\
+1.8 & $1.8062 \pm 0.0193$ & $0.6048 \pm 0.0078$ \\
+2.4 & $2.3957 \pm 0.0145$ & $0.8010 \pm 0.0102$ \\
+2.7 & $2.6878 \pm 0.0122$ & $0.8993 \pm 0.0051$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[H]
+\centering
+\caption{Resultados obtidos dos experimentos para a política aleatória: Tempo médio de resposta ($E[R]$) e número médio de requisições ($E[N]$).}
+\label{tab:simulations_random_response_number}
+\begin{tabular}{ccc}
+\toprule
+$\lambda$ & $E[R]$ & $E[N]$ \\
+\midrule
+0.6 & $1.2587 \pm 0.0288$ & $0.7625 \pm 0.0170$ \\
+1.2 & $1.6762 \pm 0.0462$ & $2.0132 \pm 0.0627$ \\
+1.8 & $2.5572 \pm 0.0954$ & $4.6204 \pm 0.1974$ \\
+2.4 & $5.0711 \pm 0.4594$ & $12.1535 \pm 1.1671$ \\
+2.7 & $10.3391 \pm 1.0409$ & $27.7937 \pm 2.8292$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+
+% \begin{table}[h!]
+% \centering
+% \caption{Resultados obtidos dos experimentos para a política Round Robin.}
+% \label{tab:simulations_round_robin}
+% \begin{tabular}{ccccc}
+% \toprule
+% $\lambda$ & $X$ & $U_i$ & $E[R]$ & $E[N]$ \\
+% \midrule
+% 0.6 & $0.6058 \pm 0.0078$ & $0.2022 \pm 0.0030$ & $1.0689 \pm 0.0146$ & $0.6475 \pm 0.0114$ \\
+% 1.2 & $1.2007 \pm 0.0093$ & $0.4010 \pm 0.0062$ & $1.2906 \pm 0.0265$ & $1.5501 \pm 0.0389$ \\
+% 1.8 & $1.8062 \pm 0.0191$ & $0.6045 \pm 0.0083$ & $1.8648 \pm 0.0599$ & $3.3682 \pm 0.1271$ \\
+% 2.4 & $2.3955 \pm 0.0148$ & $0.8008 \pm 0.0101$ & $3.4338 \pm 0.2514$ & $8.2279 \pm 0.6422$ \\
+% 2.7 & $2.6901 \pm 0.0117$ & $0.9001 \pm 0.0050$ & $6.8363 \pm 0.8147$ & $18.3619 \pm 2.2026$ \\
+% \bottomrule
+% \end{tabular}
+% \end{table}
+
+\begin{table}[H]
+\centering
+\caption{Resultados obtidos dos experimentos para a política Round Robin: Vazão ($X$) e Utilização ($U_i$).}
+\label{tab:simulations_rr_throughput_utilization}
+\begin{tabular}{ccc}
+\toprule
+$\lambda$ & $X$ & $U_i$ \\
+\midrule
+0.6 & $0.6058 \pm 0.0078$ & $0.2022 \pm 0.0030$ \\
+1.2 & $1.2007 \pm 0.0093$ & $0.4010 \pm 0.0062$ \\
+1.8 & $1.8062 \pm 0.0191$ & $0.6045 \pm 0.0083$ \\
+2.4 & $2.3955 \pm 0.0148$ & $0.8008 \pm 0.0101$ \\
+2.7 & $2.6901 \pm 0.0117$ & $0.9001 \pm 0.0050$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[H]
+\centering
+\caption{Resultados obtidos dos experimentos para a política Round Robin: Tempo médio de resposta ($E[R]$) e número médio de requisições ($E[N]$).}
+\label{tab:simulations_rr_response_number}
+\begin{tabular}{ccc}
+\toprule
+$\lambda$ & $E[R]$ & $E[N]$ \\
+\midrule
+0.6 & $1.0689 \pm 0.0146$ & $0.6475 \pm 0.0114$ \\
+1.2 & $1.2906 \pm 0.0265$ & $1.5501 \pm 0.0389$ \\
+1.8 & $1.8648 \pm 0.0599$ & $3.3682 \pm 0.1271$ \\
+2.4 & $3.4338 \pm 0.2514$ & $8.2279 \pm 0.6422$ \\
+2.7 & $6.8363 \pm 0.8147$ & $18.3619 \pm 2.2026$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+% \begin{table}[h!]
+% \centering
+% \caption{Resultados obtidos dos experimentos para a política de Fila Mais Curta.}
+% \label{tab:simulations_shortest_queue}
+% \begin{tabular}{ccccc}
+% \toprule
+% $\lambda$ & $X$ & $U_i$ & $E[R]$ & $E[N]$ \\
+% \midrule
+% 0.6 & $0.6060 \pm 0.0078$ & $0.2024 \pm 0.0030$ & $1.0254 \pm 0.0137$ & $0.6212 \pm 0.0092$ \\
+% 1.2 & $1.2009 \pm 0.0095$ & $0.4009 \pm 0.0062$ & $1.1314 \pm 0.0223$ & $1.3587 \pm 0.0314$ \\
+% 1.8 & $1.8063 \pm 0.0191$ & $0.6042 \pm 0.0079$ & $1.4497 \pm 0.0337$ & $2.6186 \pm 0.0803$ \\
+% 2.4 & $2.3950 \pm 0.0142$ & $0.8006 \pm 0.0099$ & $2.3187 \pm 0.1590$ & $5.5569 \pm 0.4089$ \\
+% 2.7 & $2.6895 \pm 0.0113$ & $0.9000 \pm 0.0054$ & $3.8893 \pm 0.3278$ & $10.4554 \pm 0.9086$ \\
+% \bottomrule
+% \end{tabular}
+% \end{table}
+
+\begin{table}[H]
+\centering
+\caption{Resultados obtidos dos experimentos para a política de Fila Mais Curta: Vazão ($X$) e Utilização ($U_i$).}
+\label{tab:simulations_sfq_throughput_utilization}
+\begin{tabular}{ccc}
+\toprule
+$\lambda$ & $X$ & $U_i$ \\
+\midrule
+0.6 & $0.6060 \pm 0.0078$ & $0.2024 \pm 0.0030$ \\
+1.2 & $1.2009 \pm 0.0095$ & $0.4009 \pm 0.0062$ \\
+1.8 & $1.8063 \pm 0.0191$ & $0.6042 \pm 0.0079$ \\
+2.4 & $2.3950 \pm 0.0142$ & $0.8006 \pm 0.0099$ \\
+2.7 & $2.6895 \pm 0.0113$ & $0.9000 \pm 0.0054$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[H]
+\centering
+\caption{Resultados obtidos dos experimentos para a política de Fila Mais Curta: Tempo médio de resposta ($E[R]$) e número médio de requisições ($E[N]$).}
+\label{tab:simulations_sfq_response_number}
+\begin{tabular}{ccc}
+\toprule
+$\lambda$ & $E[R]$ & $E[N]$ \\
+\midrule
+0.6 & $1.0254 \pm 0.0137$ & $0.6212 \pm 0.0092$ \\
+1.2 & $1.1314 \pm 0.0223$ & $1.3587 \pm 0.0314$ \\
+1.8 & $1.4497 \pm 0.0337$ & $2.6186 \pm 0.0803$ \\
+2.4 & $2.3187 \pm 0.1590$ & $5.5569 \pm 0.4089$ \\
+2.7 & $3.8893 \pm 0.3278$ & $10.4554 \pm 0.9086$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Veja que os resultados da tabela são promissores, pois podemos primeiramente verificar o argumento de que a vazão e a utilização do sistema para qualquer política é similar. Portanto, esse primeiro resultado demonstrado na parte analítica pode ser observada empíricamete.
+
+Além disso, podemos comparar que os valores de $E[R]$ presentes na Tabela \ref{tab:simulations} estão de acordo com as calculadas dentro da Tabela \ref{tab:simulations_random} e isso também faz bastante sentido, uma vez que essa simulação representa a modelagem teórica desenvolvida.
+
+Veja também que para qualquer linha experimetal, temos que:
+
+$$
+E[R]_{SFQ} \leq E[R]_{Round Robin} \leq E[R]_{Random} \approx \frac{1}{\mu - \lambda/3}
+$$
+
+Pois, para $\lambda = 0.6$, temos:
+
+$$
+1.0254 \leq 1.0689 \leq 1.2587 \approx \frac{1}{1 - 0.6/3} = 1.25
+$$
+
+Para $\lambda = 1.2$, temos:
+
+$$
+1.1314 \leq 1.2906 \leq 1.6762 \approx \frac{1}{1 - 1.2/3} = 1.66
+$$
+
+Para $\lambda = 1.8$, temos:
+
+$$
+1.4497 \leq 1.8648 \leq 2.5572 \approx \frac{1}{1 - 1.8/3} = 2.50
+$$
+
+Para $\lambda = 2.4$, temos:
+
+$$
+2.3187 \leq 3.4338 \leq 5.0711 \approx \frac{1}{1 - 2.4/3} = 5.00
+$$
+
+Para $\lambda = 2.7$, temos:
+
+$$
+3.8893 \leq 6.8363 \leq 10.3391 \approx \frac{1}{1 - 2.7/3} = 10.00
+$$
+
+Essa ordenação faz sentido, uma vez que se considerarmos que uma requisição sempre escolhe a fila de menor espera na política de \textbf{SFQ}, então é esperado que essa política possua o menor tempo de resposta. De modo similar, a política de \textbf{Round Robin} possui uma melhor distribuição de carga entre os servidores do que a política Aleatória, dado que os servidores são homogêneos, então é sempre melhor distribuir igualmente a carga entre eles do que se um dos servidores receber maior carga. De modo mais prático, os servidores na política de \textbf{Round Robin} sempre estarão semelhantes, representando por tuplas as cargas, teríamos exemplos como (1, 1, 1); (2, 2, 2) ou aquelas que diferem por poucos (3, 3, 2); (4, 3, 3) contudo é esperado que um servidor com menor fila receba a próxima requisição. Contudo, isso não ocorre para o servidor aleatório, em um caso mais extremo em uma rajada de três requisições não é tão improvável que essas três requisições sejam roteadas para o mesmo servidor (probabilidade na ordem de 1/27). Dessa forma, a seguinte tabela de ganho pode ser calculada.
+
+Dessa forma, conseguimos utilizar a seguinte fórmula para calcular a melhora de cada sistema:
+
+$$
+\text{Melhora(\%)} = \frac{E[R]_{Random} - E[R]_{Target}}{E[R]_{Random}} \cdot 100\%
+$$
+
+Os resultados apresentados do experimento são mostrados nas tabelas Tabela \ref{tab:comp_rr} e Tabela \ref{tab:comp_sfq}.
+
+\begin{table}[h!]
+\centering
+\small
+\caption{Comparação de $E[R]$ entre Aleatória (Ref.) e Round Robin.}
+\label{tab:comp_rr}
+\begin{tabular}{cccc}
+\toprule
+$\lambda$ & \textbf{Aleatória (Ref.)} & \textbf{Round Robin} & \textbf{Melhora (\%)} \\
+\midrule
+0.6 & $1.2587 \pm 0.0288$ & $1.0689 \pm 0.0146$ & $15.08\%$ \\
+1.2 & $1.6762 \pm 0.0462$ & $1.2906 \pm 0.0265$ & $23.00\%$ \\
+1.8 & $2.5572 \pm 0.0954$ & $1.8648 \pm 0.0599$ & $27.08\%$ \\
+2.4 & $5.0711 \pm 0.4594$ & $3.4338 \pm 0.2514$ & $32.29\%$ \\
+2.7 & $10.3391 \pm 1.0409$ & $6.8363 \pm 0.8147$ & $33.88\%$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[h!]
+\centering
+\small
+\caption{Comparação de $E[R]$ entre Aleatória (Ref.) e Shortest Queue (SFQ).}
+\label{tab:comp_sfq}
+\begin{tabular}{cccc}
+\toprule
+$\lambda$ & \textbf{Aleatória (Ref.)} & \textbf{(SFQ)} & \textbf{Melhora (\%)} \\
+\midrule
+0.6 & $1.2587 \pm 0.0288$ & $1.0254 \pm 0.0137$ & $18.54\%$ \\
+1.2 & $1.6762 \pm 0.0462$ & $1.1314 \pm 0.0223$ & $32.50\%$ \\
+1.8 & $2.5572 \pm 0.0954$ & $1.4497 \pm 0.0337$ & $43.31\%$ \\
+2.4 & $5.0711 \pm 0.4594$ & $2.3187 \pm 0.1590$ & $54.28\%$ \\
+2.7 & $10.3391 \pm 1.0409$ & $3.8893 \pm 0.3278$ & $62.38\%$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+A verificação da Lei de Little é facilmente verificada pelas tabelas Tabela \ref{tab:little_random}, Tabela \ref{tab:little_rr} e Tabela \ref{tab:little_sfq}.
+
+\FloatBarrier
+\begin{table}[h!]
+\centering
+\small
+\caption{Verificação da Lei de Little para a Política Aleatória.}
+\label{tab:little_random}
+\begin{tabular}{ccccc}
+\toprule
+$\lambda$ & $X$ & $E[R]$ & $X \cdot E[R]$ & $E[N]_{\text{medido}}$ \\
+\midrule
+0.6 & $0.6059$ & $1.2587$ & $0.7626$ & $0.7625$ \\
+1.2 & $1.2007$ & $1.6762$ & $2.0126$ & $2.0132$ \\
+1.8 & $1.8062$ & $2.5572$ & $4.6188$ & $4.6204$ \\
+2.4 & $2.3957$ & $5.0711$ & $12.1488$ & $12.1535$ \\
+2.7 & $2.6878$ & $10.3391$ & $27.7894$ & $27.7937$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\FloatBarrier
+\begin{table}[h!]
+\centering
+\small
+\caption{Verificação da Lei de Little para a Política Round Robin.}
+\label{tab:little_rr}
+\begin{tabular}{ccccc}
+\toprule
+$\lambda$ & $X$ & $E[R]$ & $X \cdot E[R]$ & $E[N]_{\text{medido}}$ \\
+\midrule
+0.6 & $0.6058$ & $1.0689$ & $0.6475$ & $0.6475$ \\
+1.2 & $1.2007$ & $1.2906$ & $1.5496$ & $1.5501$ \\
+1.8 & $1.8062$ & $1.8648$ & $3.3682$ & $3.3682$ \\
+2.4 & $2.3955$ & $3.4338$ & $8.2257$ & $8.2279$ \\
+2.7 & $2.6901$ & $6.8363$ & $18.3904$ & $18.3619$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\FloatBarrier
+\begin{table}[h!]
+\centering
+\small
+\caption{Verificação da Lei de Little para a Política de Fila Mais Curta.}
+\label{tab:little_sfq}
+\begin{tabular}{ccccc}
+\toprule
+$\lambda$ & $X$ & $E[R]$ & $X \cdot E[R]$ & $E[N]_{\text{medido}}$ \\
+\midrule
+0.6 & $0.6060$ & $1.0254$ & $0.6214$ & $0.6212$ \\
+1.2 & $1.2009$ & $1.1314$ & $1.3587$ & $1.3587$ \\
+1.8 & $1.8063$ & $1.4497$ & $2.6186$ & $2.6186$ \\
+2.4 & $2.3950$ & $2.3187$ & $5.5533$ & $5.5569$ \\
+2.7 & $2.6895$ & $3.8893$ & $10.4603$ & $10.4554$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Por fim da análise dos casos que estão dentro da condição de estabilidade podemos apresentar um gráfico que mostra os comparativos das curvas obtidas e estão presentes na Figura \ref{fig:comparison}.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.5\textwidth]{grafico_er_politicas.png}
+    \caption{Comparação entre as curvas obtidas experimentalmente e as comparações teóricas.}
+    \label{fig:comparison}
+\end{figure}
+
+Por fim, podemos analisar o caso para quando $\lambda = 3.3$. Veja que o sistema é instável, pois há uma taxa de requisições que chegam que não consegue ser atendida pelo sistema. Veja que as fórmulas dos itens anteriores deixam de valer, uma vez que há outros fenômenos que começam a acontecer. Como o efeito de acúmulo de requisições que aumenta indefinitivamente o tempo de resposta do sistema, assim como o tempo de fila começa a tender a infinito, ou seja, $E[N] \rightarrow \infty$ e $E[R] \rightarrow \infty$.
+
+Utilizando o modelo de fluido, temos que:
+
+$$
+N(t) \approx N(0) + (\lambda - 3 \cdot \mu) \cdot t
+$$
+
+Sendo que $N(0) = 0$, pois no momento $t = 0$ não há requisições.
+
+$$
+N(t) \approx (3.3 - 3 \cdot 1) \cdot t = 0.3 \cdot t
+$$
+
+\section{Conclusão}
+
+
+\section*{Divisão de Trabalho}
+
+
+\end{document}
