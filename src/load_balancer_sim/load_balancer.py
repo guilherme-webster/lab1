@@ -29,6 +29,66 @@ def _validate_servers(
         raise ValueError("os identificadores dos servidores devem ser unicos")
     return tuple(servers)
 
+@dataclass
+class RandomPolicy:
+    rng: Random
+
+    def select_server(
+        self,
+        request: Request,
+        servers: list[Server],
+        seed: int | None = None,
+    ) -> Server:
+        if seed is not None:
+            self.rng.seed(seed)
+        return self.rng.choice(servers)
+
+
+@dataclass 
+class RoundRobinPolicy:
+    _next_index: int = 0
+
+    def select_server(
+        self,
+        request: Request,
+        servers: list[Server],
+    ) -> Server:
+        server = servers[self._next_index]
+        self._next_index = (self._next_index + 1) % len(servers)
+        return server
+
+
+@dataclass 
+class ShortestQueuePolicy:
+    rng: Random | None = None
+
+    def select_server(
+        self,
+        request: Request,
+        servers: list[Server],
+    ) -> Server:
+        minimum_load = min(s.active_count + s.waiting_count for s in servers)
+        candidates = [
+            s for s in servers if s.active_count + s.waiting_count == minimum_load
+        ]
+        if len(candidates) == 1 or self.rng is None:
+            return candidates[0]
+        return self.rng.choice(candidates)
+
+
+def build_policy(
+    policy_name: PolicyName,
+    seed: int | None = None,
+) -> RoutingPolicy:
+    if policy_name == "random":
+        return RandomPolicy(Random(seed))
+    elif policy_name == "round_robin":
+        return RoundRobinPolicy()
+    elif policy_name == "shortest_queue":
+        return ShortestQueuePolicy(Random(seed) if seed is not None else None)
+    else:
+        raise ValueError(f"politica desconhecida: {policy_name}")
+
 
 class LoadBalancer:
     """Seleciona um servidor e agenda o atendimento de cada requisicao."""
