@@ -91,6 +91,8 @@ python -m pip install --upgrade pip
 python -m pip install -e ".[dev]"
 ```
 
+Após o ambiente ter sido configurado, você poderá executar o notebook "experimentos_balanceador_carga.ipynb" que demonstra todos os resultados obtidos dentro do relatório. Além disso, você deve utilizar o .venv como kernel do Jupyter Notebook.
+
 ### Windows PowerShell
 
 ```powershell
