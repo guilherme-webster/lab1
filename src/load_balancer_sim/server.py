@@ -77,19 +77,31 @@ class Server:
         self,
         environment: simpy.Environment,
         server_id: int,
-        capacity: int = 15,
-        service_time: float = 0.05,
-        rng: Random | None = None,
+        capacity: int = 1,
+        service_rate: float = 20.0,
+        seed: int | None = None,
+        service_time_sampler: ServiceTimeSampler | None = None,
+        on_service_started: ServerEventCallback | None = None,
+        on_service_completed: ServerEventCallback | None = None,
     ) -> None:
         if not isinstance(environment, simpy.Environment):
             raise TypeError("environment deve ser um simpy.Environment")
-        if rng is not None and not isinstance(rng, Random):
-            raise TypeError("rng deve ser um random.Random")
+        if seed is not None:
+            _non_negative_integer(seed, "seed")
+        if service_time_sampler is not None and not callable(service_time_sampler):
+            raise TypeError("service_time_sampler deve ser chamavel")
+        if on_service_started is not None and not callable(on_service_started):
+            raise TypeError("on_service_started deve ser chamavel")
+        if on_service_completed is not None and not callable(on_service_completed):
+            raise TypeError("on_service_completed deve ser chamavel")
 
         self.environment = environment
         self.id = _non_negative_integer(server_id, "server_id")
-        self.service_time = _positive_time(service_time, "service_time")
-        self._rng = rng
+        self.service_rate = _positive_number(service_rate, "service_rate")
+        self._rng = Random(seed)
+        self._service_time_sampler = service_time_sampler
+        self._on_service_started = on_service_started
+        self._on_service_completed = on_service_completed
         self._resource = simpy.Resource(
             environment,
             capacity=_positive_integer(capacity, "capacity"),
@@ -184,20 +196,13 @@ class Server:
             yield slot
             request.mark_service_started(self.environment.now)
             self._record_state("service_started", request.id)
-            yield self.environment.timeout(self._sample_service_duration())
+            if self._on_service_started is not None:
+                self._on_service_started(request, self)
+
+            yield self.environment.timeout(self._next_service_duration(request))
             request.mark_completed(self.environment.now)
 
         self._completed_count += 1
+        if self._on_service_completed is not None:
+            self._on_service_completed(request, self)
         self._record_state("service_completed", request.id)
-
-    def _sample_service_duration(self) -> float:
-        """Retorna a duracao do proximo atendimento.
-
-        Sem um gerador aleatorio, o tempo de servico e constante (compatível
-        com o comportamento historico do servidor). Quando um ``rng`` e
-        informado, a duracao e amostrada de uma exponencial com media
-        ``service_time``, como exigido pelo modelo M/M/1 do enunciado.
-        """
-        if self._rng is None:
-            return self.service_time
-        return self._rng.expovariate(1.0 / self.service_time)

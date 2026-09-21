@@ -9,6 +9,9 @@ from load_balancer_sim.policies import RoutingPolicy, build_policy
 from load_balancer_sim.request import Request
 from load_balancer_sim.server import Server
 
+from dataclasses import dataclass
+from random import Random
+
 
 def _validate_servers(
     environment: simpy.Environment,
